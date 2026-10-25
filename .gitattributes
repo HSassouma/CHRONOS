@@ -1,0 +1,8 @@
+# Normalise line endings — the project is authored in LF
+* text=auto eol=lf
+
+# Binary assets
+*.woff2 binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
