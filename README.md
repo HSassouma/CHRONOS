@@ -3,6 +3,8 @@
 > **Haute horlogerie, rendered live in the browser.**
 > An architectural luxury timepiece concept with a real-time 3D calibre — built from raw WebGL2, with **zero frameworks, zero dependencies and zero build step**.
 
+**▶ Live demo: https://hsassouma.github.io/CHRONOS/** &nbsp;·&nbsp; **Repository: https://github.com/HSassouma/CHRONOS**
+
 `CHRONOS ONE` is a single-page immersive product experience: a scroll-driven story in five chapters where the visitor steers a *simulated* mechanical movement, orbits the watch, explodes the assembly into nine hand-finished components, and pulls individual parts out of the case to inspect them — all in real time, on a custom-written rendering pipeline.
 
 ---
@@ -241,6 +243,18 @@ npx serve .                    # or any static host — no build, no config
 ```
 
 Then open **http://localhost:8732** — the 3D scene needs a browser with WebGL2 (all current Chrome / Edge / Firefox / Safari).
+
+### Deployment
+
+The project is a plain static bundle — no build output to publish. It is deployed on
+**GitHub Pages** from the `main` branch, root `/` (the `.nojekyll` file makes Pages serve every
+asset verbatim, without a Jekyll pass):
+
+- **Live site:** https://hsassouma.github.io/CHRONOS/
+- **Repository:** https://github.com/HSassouma/CHRONOS
+
+Any other static host (Netlify, Vercel, S3 + CloudFront, nginx) works exactly the same way:
+publish the folder as-is.
 
 ---
 
