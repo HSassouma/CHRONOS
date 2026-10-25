@@ -1586,3 +1586,304 @@ function inspFrame(dt, k, now) {
   } else if (lead.on) { leader.classList.remove('on'); lead.on = false; }
 }
 
+// ---------- Chrome UI extras: progress, contact shadow, hint, exploded callouts ----------
+const progEl = $('#progress'), rootEl = document.documentElement;
+let progDirty = true, lastProg = -1, lastShx = NaN;
+addEventListener('scroll', () => progDirty = true, { passive: true });
+
+// First user interaction dismisses the anatomy hint
+['pointerdown', 'keydown'].forEach(t =>
+  addEventListener(t, () => document.body.classList.add('hinted'), { once: true, passive: true }));
+
+// Exploded-view callouts: one pill per part, projected while the section is active
+const EXL = [
+  ['crystal', 'Crystal', -132, -14],
+  ['bezel', 'Bezel', -146, 12],
+  ['hands', 'Hands', 134, -30],
+  ['dial', 'Dial', -152, -10],
+  ['movement', 'Movement', 150, -8],
+  ['case', 'Case', -150, 16],
+  ['strap', 'Bracelet', 152, 52],
+  ['caseback', 'Case back', 142, 28],
+  ['crown', 'Crown', 154, -16]
+];
+const exlWrap = $('#exl');
+const exlData = EXL.map(([id, label, ox, oy]) => {
+  const el = document.createElement('span');
+  el.className = 'exl';
+  el.textContent = label;
+  exlWrap.appendChild(el);
+  return { el, p: parts.find(q => q.id === id), ox, oy, px: 0, py: 0, on: false, w: 0 };
+});
+const EX_XY = [0, 0, false], EX_O = [0, 0, 0];
+
+// ---------- Adaptive staging: keep the watch clear of the reading panel ----------
+// The renderer measures the watch's on-screen width each frame and eases the camera
+// so the watch sits centred in the free band beside the panel — in every section,
+// at every viewport. Bottom-sheet layouts (phones / portrait tablets) stage in CSS.
+// Envelope = widest body geometry: case/bezel ring (r 2.16), crown guards, lug screws.
+const WATCH_ENV = [
+  [2.16, 0, 0], [1.08, 0, 1.87], [-1.08, 0, 1.87], [-2.16, 0, 0], [-1.08, 0, -1.87], [1.08, 0, -1.87],
+  [2.16, .26, 0], [-2.16, .26, 0], [0, .26, 2.16], [0, .26, -2.16],
+  [2.45, .06, 0],
+  [1.12, -.12, 2.4], [-1.12, -.12, 2.4], [1.12, -.12, -2.4], [-1.12, -.12, -2.4]
+];
+const SZERO = [0, 0, 0], SP = [0, 0, false];
+const STAGE = { ok: false, sheet: false, box: null, a: 0, b: 0, left: true, chipL: 8, chipR: 0 };
+let projLast = null, stageY = 0, sheetRest = .42;
+
+function measureStage() {
+  STAGE.ok = false;
+  const w = innerWidth, h = innerHeight;
+  STAGE.sheet = w <= 760 || (w <= 1100 && h > w); // bottom-sheet layout
+  const sec = document.getElementById(st.cur);
+  STAGE.chipL = 8;
+  STAGE.chipR = w - 8;
+  if (!sec || !R || STAGE.sheet) return; // sheet layout stages in frame()
+  const r = sec.querySelector('.panel').getBoundingClientRect();
+  STAGE.left = !sec.classList.contains('r');
+  STAGE.a = STAGE.left ? r.right + 22 : 18;
+  STAGE.b = STAGE.left ? w - 18 : r.left - 22;
+  STAGE.ok = STAGE.b - STAGE.a > 140;
+  if (STAGE.ok) {
+    STAGE.chipL = STAGE.left ? r.right + 6 : 8;
+    STAGE.chipR = STAGE.left ? w - 8 : r.left - 6;
+  }
+}
+
+// Callout chips never hide beneath the fixed header; sizes re-measured on resize / font load
+let chipTop = 8;
+const measureChrome = () => {
+  const hd = document.querySelector('header');
+  chipTop = (hd ? hd.offsetHeight : 0) + 10;
+  hsData.forEach(o => { o.w = o.h = 0; });
+  exlData.forEach(o => { o.w = 0; });
+  progDirty = true;
+  measureSecs();
+  measurePanels();
+  measureStage();
+  if (STAGE.sheet) { // resting top offset of the reading cards (bottom-sheet band)
+    let m = Infinity;
+    SECTIONS.forEach(s => {
+      const p = s.querySelector('.panel');
+      if (p) m = Math.min(m, p.getBoundingClientRect().top - s.getBoundingClientRect().top);
+    });
+    if (m > 0 && m < innerHeight) sheetRest = Math.min(Math.max(m / innerHeight, .2), .8);
+  }
+};
+measureChrome();
+addEventListener('resize', measureChrome);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureChrome);
+
+let last = performance.now(), clockT = 0, ph = 0, lastSy = -1;
+const nowDate = new Date();
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - last) / 1000, .1);
+  last = now;
+  if (document.hidden) return;
+
+  if (scrollY !== lastSy) { lastSy = scrollY; updateActive(); measurePanels(); }
+
+  sim.tick();
+  const k = RM ? 1 : 1 - Math.exp(-dt * 3.2);
+  inspFrame(dt, k, now);
+  const P = INSP.hold || PRE[st.cur]; // section preset stays frozen while a component is out
+
+  // Adaptive staging: ease distance & lateral shift so the watch clears the panel band.
+  // Side-by-side layout: centre the watch in the free band beside the card.
+  // Bottom-sheet layout: fit the watch into the band above the card (vertical).
+  let dT = P.d, sxT = P.sx;
+  if (projLast && (STAGE.ok || STAGE.sheet)) {
+    let mn = Infinity, mx = -Infinity, mnY = Infinity, mxY = -Infinity;
+    for (const v of WATCH_ENV) {
+      projLast(v, SZERO, SP);
+      if (SP[2]) {
+        if (SP[0] < mn) mn = SP[0]; if (SP[0] > mx) mx = SP[0];
+        if (SP[1] < mnY) mnY = SP[1]; if (SP[1] > mxY) mxY = SP[1];
+      }
+    }
+    const zf = cam.uz * (innerWidth / innerHeight < .9 ? 1.5 : 1); // base-distance compensation
+    if (mn < mx && mnY < mxY) STAGE.box = [mn, mnY, mx, mxY]; else STAGE.box = null;
+    if (INSP.fw < .03) { // hold the staged composition while a component is out for inspection
+      if (STAGE.ok && mn < mx) {
+        const w2 = innerWidth / 2;
+        const box = (mx - mn) * zf;                    // uz-independent width
+        const base = (mn + mx) / 2 - cam.sx * w2;      // sx-independent centre
+        const avail = Math.max(STAGE.b - STAGE.a - 40, 110);
+        dT = Math.min(Math.max(cam.d * box / avail, P.d), P.d * 3);
+        const wp = box * cam.d / dT;
+        const cx = wp <= avail ? (STAGE.a + STAGE.b) / 2
+          : (STAGE.left ? STAGE.a + 18 + wp / 2 : STAGE.b - 18 - wp / 2);
+        sxT = clamp((cx - base) / w2, -.9, .9);
+      } else if (STAGE.sheet && mnY < mxY) {
+        // Keep the watch fully above the reading sheet: fit it into the fixed band above the
+        // settling cards (sheetRest = the cards' resting top offset, measured on resize).
+        const top = chipTop + 2;
+        const bot = Math.max(Math.min(innerHeight * sheetRest, innerHeight - 10) - 14, top + 80);
+        const hh = (mxY - mnY) * zf, ww = (mx - mn) * zf;
+        const kk = Math.max(1, hh / (bot - top), ww / (innerWidth - 16));
+        dT = Math.min(Math.max(cam.d * kk, P.d), P.d * 2.8);
+        const cy = (mnY + mxY) / 2, tgt = (top + bot) / 2;
+        stageY += clamp((tgt - cy) / (innerHeight / 2), -.3, .3) * k; // ease the vertical recentring
+      }
+    }
+  }
+  applyFades();
+
+  ['a', 'e', 'y'].forEach(f => cam[f] += (P[f] - cam[f]) * k);
+  cam.d += (dT - cam.d) * k;
+  cam.sx += (sxT - cam.sx) * k;
+  cam.E += ((st.mE ?? P.E) - cam.E) * k;
+  cam.ue = clamp(cam.ue, .05 - cam.e, 1.45 - cam.e);
+
+  st.intro = Math.min(1, st.intro + dt / 1.8);
+  const ie = 1 - (1 - st.intro) ** 3;
+
+  nowDate.setTime(sim.t);
+  const d = nowDate;
+  const sec = RM ? d.getSeconds() : d.getSeconds() + d.getMilliseconds() / 1000;
+  const mi = d.getMinutes() + sec / 60;
+  const hr = d.getHours() % 12 + mi / 60;
+
+  A.h = hr / 12 * TAU * ie;
+  A.m = mi / 60 * TAU * ie;
+  A.s = sec / 60 * TAU * ie;
+  A.a = (sim.t / 1000 * .35) % TAU;
+  ph = (ph + dt * 4 * TAU * clamp(Math.abs(sim.rate), 0, 1.5) * (RM ? .25 : 1)) % TAU;
+  A.bal = .9 * Math.sin(ph);
+
+  const proj = R ? R.render() : null;
+  projLast = proj;
+  if (proj) {
+    if (st.cur === 'inside') {
+      const placed = [];
+      hsData.forEach(o => {
+        proj(o.v, o.p, HS_XY);
+        if (HS_XY[2] !== o.shown) {
+          o.b.hidden = !HS_XY[2];
+          o.shown = HS_XY[2];
+          if (HS_XY[2]) {
+            if (!o.w) o.w = o.b.offsetWidth || 0;
+            if (!o.h) o.h = o.b.offsetHeight || 0;
+          }
+        }
+        if (HS_XY[2]) {
+          let x = HS_XY[0] + o.ox;
+          const h = o.h || 44;
+          let y = Math.min(Math.max(HS_XY[1] + o.oy, chipTop), innerHeight - h - 8);
+          if (o.w) x = Math.min(Math.max(x, STAGE.chipL), STAGE.chipR - o.w);
+          // Chips never stack onto each other (small viewports): nudge the later one down
+          for (const q of placed) {
+            if (x < q.x + q.w + 6 && q.x < x + o.w + 6 && y < q.y + q.h + 6 && q.y < y + h + 6) {
+              y = Math.min(q.y + q.h + 8, innerHeight - h - 8);
+            }
+          }
+          placed.push({ x, y, w: o.w, h });
+          if (Math.abs(x - o.px) > .5 || Math.abs(y - o.py) > .5) {
+            o.px = x;
+            o.py = y;
+            o.b.style.transform = `translate(${x}px,${y}px)`;
+          }
+        }
+      });
+    } else if (st.cur === 'explode') {
+      const spread = cam.E > .12;
+      exlData.forEach(o => {
+        if (!spread) {
+          if (o.on) { o.on = false; o.el.classList.remove('on'); }
+          return;
+        }
+        proj(EX_O, o.p, EX_XY);
+        if (!EX_XY[2]) {
+          if (o.on) { o.on = false; o.el.classList.remove('on'); }
+          return;
+        }
+        if (!o.w) o.w = o.el.offsetWidth || 0;
+        const x = Math.min(Math.max(EX_XY[0] + o.ox, STAGE.chipL), STAGE.chipR - o.w);
+        const y = Math.min(Math.max(EX_XY[1] + o.oy, chipTop), innerHeight - 52);
+        if (Math.abs(x - o.px) > .5 || Math.abs(y - o.py) > .5) {
+          o.px = x;
+          o.py = y;
+          o.el.style.transform = `translate(${x}px,${y}px)`;
+        }
+        if (!o.on) { o.on = true; o.el.classList.add('on'); }
+      });
+    }
+  } else {
+    const rot = (id, a) => $(id).setAttribute('transform', `rotate(${a * 180 / Math.PI})`);
+    rot('#sh', A.h);
+    rot('#sm', A.m);
+    rot('#ss', A.s);
+    $('#face').style.transform = `translateX(${P.sx * 40}vw)`;
+  }
+
+  // Scroll progress hairline (measured only when the page or viewport changed)
+  if (progDirty) {
+    progDirty = false;
+    const sw = rootEl.scrollHeight - innerHeight;
+    const p = sw > 0 ? clamp(scrollY / sw, 0, 1) : 0;
+    if (Math.abs(p - lastProg) > .002) {
+      lastProg = p;
+      progEl.style.transform = `scaleX(${p.toFixed(4)})`;
+    }
+  }
+
+  // Studio contact shadow follows the camera shift
+  if (Math.abs(cam.sx - lastShx) > .004) {
+    lastShx = cam.sx;
+    rootEl.style.setProperty('--shx', (50 + cam.sx * 50).toFixed(2) + '%');
+  }
+
+  if (now - clockT > 100) {
+    clockT = now;
+    const txt = d.toTimeString().slice(0, 8);
+    if (clockEl.textContent !== txt) clockEl.textContent = txt;
+    const ev = Math.round(cam.E * 100);
+    if (document.activeElement !== exEl && +exEl.value !== ev) exEl.value = ev;
+  }
+}
+
+sync();
+requestAnimationFrame(frame);
+
+window.CHRONOS = {
+  cam,
+  sim,
+  st,
+  A,
+  parts: parts.map(p => p.id),
+  tris,
+  get gl() { return !!R; },
+  RM,
+  // Component-removal hooks (state inspection + scripted interaction for tests)
+  insp: {
+    get sel() { return INSP.selP ? INSP.selP.id : null; },
+    get hov() { return INSP.hovP ? INSP.hovP.id : null; },
+    get out() { return parts.filter(isOut).map(p => p.id); },
+    get fw() { return +INSP.fw.toFixed(3); },
+    meta: id => { const p = partById(id); return { name: p.nm, desc: p.ds, max: p.max, axis: p.ax.slice(), seat: p.ct.slice() }; },
+    select: id => { selectP(partById(id)); return INSP.selP ? INSP.selP.id : null; },
+    deselect,
+    extract: id => { const p = partById(id); selectP(p); if (!isOut(p)) outset(p); return p.pullT; },
+    ret: id => { returnP(partById(id)); },
+    reassemble,
+    state: id => {
+      const p = partById(id);
+      return { pull: +p.pull.toFixed(4), pullT: +p.pullT.toFixed(4), lat: +p.lat.toFixed(4), rot: +p.rot.toFixed(4), tilt: +p.tilt.toFixed(4), on: p.mmOn, off: p.off.map(v => +v.toFixed(4)) };
+    },
+    pick: (x, y) => { const p = pickPart(x, y); return p ? p.id : null; },
+    proj: (x, y, z) => {
+      const s = [0, 0, false];
+      if (!projLast) return null;
+      projLast([x, y, z], SZERO, s);
+      return [Math.round(s[0]), Math.round(s[1]), s[2]];
+    },
+    centre: id => {
+      const p = partById(id), c = worldC(p, [0, 0, 0]), s = [0, 0, false];
+      if (projLast) projLast(c, SZERO, s);
+      return [Math.round(s[0]), Math.round(s[1]), s[2]];
+    }
+  }
+};
