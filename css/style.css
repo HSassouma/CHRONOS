@@ -1368,3 +1368,417 @@ footer {
   opacity: 0.9;
 }
 
+/* ---------- Responsive Design ---------- */
+/* Phones — and portrait tablets where a side-by-side stage cannot fit the watch —
+   use the bottom-sheet layout: watch above, reading sheet below. */
+@media (max-width: 760px), (max-width: 1100px) and (orientation: portrait) {
+  header {
+    padding: var(--space-2) var(--page-padding);
+  }
+
+  section,
+  section.r {
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding-bottom: var(--space-5);
+    min-height: auto;
+    padding-top: 42vh;
+  }
+
+  .panel {
+    max-width: none;
+    padding: var(--space-4) var(--space-3);
+    border-radius: 18px 18px 0 0;
+    margin: 0 calc(-1 * var(--page-padding));
+    width: calc(100% + 2 * var(--page-padding));
+  }
+
+  h1 {
+    font-size: clamp(2.4rem, 11vw, 3.5rem);
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 8vw, 2.5rem);
+  }
+
+  nav a {
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+  }
+
+  .hs {
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    font-size: 0.65rem;
+  }
+
+  .hs::before {
+    width: 8px;
+    height: 8px;
+    margin-top: -4px;
+    left: var(--space-2);
+  }
+
+  .row {
+    gap: var(--space-1);
+  }
+
+  .btn {
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+  }
+
+  #orbit {
+    width: min(112vmin, 680px);
+    height: min(112vmin, 680px);
+    top: -14vh;
+    bottom: auto;
+  }
+
+  .ticker,
+  #hint {
+    display: none;
+  }
+
+  .foot-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  .foot-meta {
+    text-align: left;
+  }
+
+  .foot-nav {
+    gap: 0 var(--space-3);
+  }
+
+  .blueprint .bp-text {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Compact header: keep all four chapters + wordmark on one row */
+  .mark {
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+  }
+
+  header nav {
+    gap: 0;
+  }
+
+  header nav a {
+    padding: var(--space-2) 0.42rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .panel .btn[href] {
+    width: auto;
+  }
+
+  .sp-val {
+    font-size: 0.72rem;
+  }
+
+  .sp-lbl {
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+  }
+}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+
+  #orbit .ring {
+    animation: none !important;
+  }
+
+  #curtain {
+    display: none !important;
+  }
+
+  .beat {
+    animation: none !important;
+  }
+
+  .panel,
+  .panel > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  section::before {
+    opacity: 1 !important;
+  }
+}
+
+/* ---------- Focus Visible Improvements ---------- */
+:focus-visible {
+  outline: 2px solid var(--electric-lavender);
+  outline-offset: 2px;
+}
+
+/* ---------- Print Styles ---------- */
+@media print {
+  #stage,
+  #hotspots,
+  #curtain,
+  #progress,
+  #rail,
+  #hint,
+  #exl,
+  .ticker {
+    display: none !important;
+  }
+
+  body::after {
+    display: none;
+  }
+
+  main {
+    pointer-events: auto;
+  }
+
+  section {
+    min-height: auto;
+    page-break-inside: avoid;
+  }
+
+  .panel {
+    background: white;
+    color: black;
+    border: 1px solid #ccc;
+  }
+}
+
+/* ---------- Interactive component removal (hover / select / pull / inspect) ---------- */
+#leader {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+#leader.on {
+  opacity: 1;
+}
+
+#leader line {
+  stroke: rgba(155, 143, 255, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+#leader #ldot {
+  fill: none;
+  stroke: rgba(155, 143, 255, 0.85);
+  stroke-width: 1.2;
+}
+
+#leader #lseat {
+  fill: none;
+  stroke: rgba(155, 143, 255, 0.9);
+  stroke-width: 1.2;
+  opacity: 0;
+}
+
+#leader #lseat.pop {
+  animation: seat-pop 0.7s var(--ease-out) forwards;
+}
+
+@keyframes seat-pop {
+  0% { opacity: 0.95; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+#ipl {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 7;
+  margin: 0;
+  padding: 0.3rem 0.62rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ice-silver);
+  background: rgba(7, 9, 26, 0.86);
+  border: 1px solid rgba(155, 143, 255, 0.5);
+  border-radius: 6px;
+  box-shadow: var(--glow-violet, 0 0 18px rgba(108, 92, 231, 0.35));
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+#ipl.on {
+  opacity: 1;
+}
+
+/* Panel body is click-through; only the buttons take pointer input */
+#ipanel {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-3);
+  transform: translateX(-50%);
+  z-index: 8;
+  width: min(30rem, calc(100vw - 2 * var(--space-3)));
+  margin: 0;
+  padding: var(--space-2) var(--space-3) calc(var(--space-2) * 0.85);
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 18px 44px rgba(2, 4, 9, 0.55), var(--glow-violet, 0 0 18px rgba(108, 92, 231, 0.3));
+  color: var(--ink);
+  pointer-events: none;
+}
+
+#ipanel[hidden] {
+  display: none;
+}
+
+.ip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ip-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  letter-spacing: 0.02em;
+  color: var(--ink-bright);
+}
+
+.ip-x {
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+
+.ip-x:hover,
+.ip-x:focus-visible {
+  color: var(--chrome-highlight);
+  border-color: rgba(155, 143, 255, 0.7);
+}
+
+.ip-desc {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.ip-tag {
+  margin: 0.45rem 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--electric-lavender);
+  min-height: 1.2em;
+}
+
+.ip-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.ip-btn {
+  pointer-events: auto;
+  min-height: 40px;
+  padding: 0.45rem 0.95rem;
+  border: 1px solid rgba(155, 143, 255, 0.45);
+  border-radius: 22px;
+  background: rgba(108, 92, 231, 0.16);
+  color: var(--ice-silver);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.ip-btn:hover,
+.ip-btn:focus-visible {
+  background: rgba(108, 92, 231, 0.32);
+  border-color: rgba(155, 143, 255, 0.8);
+  box-shadow: var(--glow-violet, 0 0 18px rgba(108, 92, 231, 0.35));
+}
+
+.ip-btn.ip-alt {
+  background: transparent;
+  border-color: var(--hairline);
+  color: var(--ink-dim);
+}
+
+.ip-keys {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.no-gl #ipanel,
+.no-gl #leader,
+.no-gl #ipl {
+  display: none !important;
+}
+
+@media (max-width: 760px) {
+  #ipanel {
+    bottom: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .ip-keys {
+    display: none;
+  }
+}
