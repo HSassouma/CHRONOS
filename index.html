@@ -161,3 +161,81 @@
   <p id="ex-note" hidden>The exploded view needs WebGL, which is unavailable here.</p>
   <ol class="parts" aria-label="Parts, top to bottom"><li>Crystal</li><li>Bezel</li><li>Hands</li><li>Dial</li><li>Movement</li><li>Case</li><li>Strap</li><li>Case back</li><li>Crown, to the side</li></ol>
 </div></section>
+
+<section id="craft" data-visible="false"><div class="panel">
+  <p class="eyebrow">04 — Specification</p>
+  <h2>Made to be read.</h2>
+  <dl>
+    <dt>Case</dt><dd>41 mm, Grade 5 Titanium. Satin-brushed flanks, 45° hand-beveled mirror-polished anglage, ergonomic curved horn lugs, screw-down titanium crown with emerald cabochon.</dd>
+    <dt>Dial</dt><dd>Deep imperial midnight-blue sunburst finish. Applied faceted 18k champagne-gold indices with Super-LumiNova inlays, open-heart escapement exhibition aperture at 8 o'clock, astronomical moonphase at 6 o'clock, date complication at 3 o'clock.</dd>
+    <dt>Movement</dt><dd>Manufacture Calibre C-01. 28,800 vibrations per hour (4 Hz), 18k gold balance wheel with 16 regulating screws, blued balance spring, Côtes de Genève stripes, circular perlage, 22k gold winding rotor, 31 jewels.</dd>
+    <dt>Strap</dt><dd>Integrated articulated titanium multi-link bracelet with alternating longitudinal brushed H-links, mirror-polished champagne gold center facets, and dual-pusher safety deployant clasp.</dd>
+  </dl>
+  <figure class="blueprint">
+    <svg viewBox="0 0 360 212" role="img" aria-label="Technical drawing: front elevation of the 41 millimetre case">
+      <defs>
+        <line id="bpt" x1="168" y1="22" x2="168" y2="30"/>
+        <line id="bpT" x1="168" y1="22" x2="168" y2="34"/>
+      </defs>
+      <g class="bp">
+        <line class="bp-cl" x1="168" y1="14" x2="168" y2="202"/>
+        <circle cx="168" cy="92" r="84"/>
+        <circle cx="168" cy="92" r="78" opacity=".5"/>
+        <circle cx="168" cy="92" r="70" opacity=".85"/>
+        <circle class="bp-dash" cx="168" cy="92" r="62" opacity=".75"/>
+        <use href="#bpT"/>
+        <use href="#bpT" transform="rotate(90 168 92)"/>
+        <use href="#bpT" transform="rotate(180 168 92)"/>
+        <use href="#bpT" transform="rotate(270 168 92)"/>
+        <use href="#bpt" transform="rotate(30 168 92)"/>
+        <use href="#bpt" transform="rotate(60 168 92)"/>
+        <use href="#bpt" transform="rotate(120 168 92)"/>
+        <use href="#bpt" transform="rotate(150 168 92)"/>
+        <use href="#bpt" transform="rotate(210 168 92)"/>
+        <use href="#bpt" transform="rotate(240 168 92)"/>
+        <use href="#bpt" transform="rotate(300 168 92)"/>
+        <use href="#bpt" transform="rotate(330 168 92)"/>
+        <line x1="168" y1="92" x2="168" y2="52" transform="rotate(-55 168 92)"/>
+        <line x1="168" y1="92" x2="168" y2="32" transform="rotate(65 168 92)"/>
+        <line class="bp-sec" x1="168" y1="102" x2="168" y2="26" transform="rotate(200 168 92)"/>
+        <circle cx="168" cy="92" r="2.4"/>
+        <rect x="252" y="84" width="14" height="16" rx="2"/>
+        <line x1="255.5" y1="85.5" x2="255.5" y2="98.5"/>
+        <line x1="259" y1="85.5" x2="259" y2="98.5"/>
+        <line x1="262.5" y1="85.5" x2="262.5" y2="98.5"/>
+        <circle class="bp-emer" cx="259" cy="92" r="2.4"/>
+        <path class="bp-dim" d="M84 108 V196 M252 108 V196 M84 190 H252"/>
+        <path class="bp-dim" d="M84 190 l8 -3.4 M84 190 l8 3.4 M252 190 l-8 -3.4 M252 190 l-8 3.4"/>
+        <text class="bp-text hi" x="168" y="186" text-anchor="middle">Ø 41.0 MM</text>
+        <path class="bp-dim" d="M266 92 L288 126"/>
+        <text class="bp-text" x="266" y="140">SCREW-DOWN CROWN</text>
+        <path class="bp-dim" d="M168 24 L150 10"/>
+        <text class="bp-text" x="152" y="8">18K APPLIED INDICES</text>
+      </g>
+    </svg>
+    <figcaption>Front elevation · Grade 5 titanium · moonphase, open heart &amp; date</figcaption>
+  </figure>
+  <p class="note">Concept specifications. CHRONOS ONE is an original artistic luxury timepiece concept.</p>
+</div></section>
+</main>
+<footer>
+  <div class="foot-grid">
+    <div class="foot-col">
+      <p class="foot-mark">CHRONOS</p>
+      <p class="foot-tag">Instruments of measured wonder.<br>Concept study — not for sale.</p>
+    </div>
+    <nav class="foot-nav" aria-label="Chapters">
+      <a href="#reveal">Introduction</a><a href="#time">Simulated time</a><a href="#inside">Anatomy</a><a href="#explode">Exploded view</a><a href="#craft">Specification</a>
+    </nav>
+    <div class="foot-col foot-meta">
+      <p>Cal. C-01 · 28,800 vph</p>
+      <p>Genève — MMXXVI</p>
+      <a class="foot-top" href="#reveal">Back to top <span aria-hidden="true">↑</span></a>
+    </div>
+  </div>
+  <p class="foot-fine">CHRONOS ONE is a fictional concept. Rendered with a custom WebGL2 renderer; no third-party libraries.</p>
+</footer>
+<script type="module" src="js/main.js"></script>
+<script type="module" src="js/time.js"></script>
+</body>
+</html>
