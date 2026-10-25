@@ -448,3 +448,198 @@ const gearPoly = (n, ro, ri, cutRatio = 0.5) => {
   return q;
 };
 
+// ---------- Material Palettes (Linear Color Space) ----------
+const lin = c => c.map(v => v ** 2.2);
+
+const emer = [.015, .32, .18], emerHi = [.04, .52, .26],
+  ti = [.45, .46, .50], tiHi = [.60, .62, .68],
+  steel = [.74, .76, .82], steelP = [.80, .85, .95], champ = [.84, .70, .38], champHi = [.98, .86, .56],
+  rose = [.88, .54, .36], cyanL = [.30, 1.05, 1.15], ruby = [.85, .04, .14], bz = [.72, .50, .26],
+  dark = [.03, .03, .05], plateDk = [.14, .15, .20], vioSec = [.62, .45, .98],
+  blueScrew = [.14, .26, .72], midBlue = [.015, .04, .18], midBlueHi = [.04, .12, .38],
+  whiteDial = [.92, .94, .98];
+
+const parts = [];
+const mk = (g, c, m, r, M = I, f = null, a = 1, tC = c, ir = 0, gr = 0, sb = 0) => ({ g, c: lin(c), m, r, M, f, a, t: lin(tC), i: ir, g2: gr, sb });
+const part = (id, ex, ms) => parts.push({ id, ex, ms });
+
+// Hand and gear helpers
+const hand = (L, w, hub, h, c, key) => mk(dauphineHand(L, w, hub, h), c, 1, 0.12, T(0, 0.38, 0), () => RY(-A[key]), 1, champHi, 0.3);
+const lume = (L, y, key, w = 0.016) => mk(extrude([[-w, -0.2], [w, -0.2], [w * 0.75, -L], [-w * 0.75, -L]], 0.02), cyanL, 0, 0.45, T(0, y, 0), () => RY(-A[key]), 1, cyanL, 0.9);
+const spin = (n, ro, ri, x, y, z, k, c = steel) => mk(extrude(gearPoly(n, ro, ri), 0.045), c, 0.95, 0.22, T(x, y, z), () => RY(A.a * k));
+const crownM = mul(T(2.05, 0, 0), RZ(-Math.PI / 2));
+
+// 1. CRYSTAL (Domed sapphire with AR coating)
+part('crystal', [0, 4.6, 0], [
+  mk(lathe(Array.from({ length: 16 }, (_, i) => {
+    const r = 1.82 * (1 - i / 15);
+    return [r, 0.48 + 0.14 * Math.sqrt(Math.max(0, 1 - (r / 1.82) ** 2))];
+  }), 72, 1), [.90, .94, 1.0], 0, 0.02, I, null, 0.06, [.35, .25, .95], 0.95)
+]);
+
+// 2. BEZEL (Brushed titanium with 45° polished chamfer and 8 hexagonal screws)
+part('bezel', [0, 3.6, 0], [
+  mk(lathe([[1.78, .36], [2.04, .36], [2.04, .48], [1.78, .48]], 72), ti, .94, .28, I, null, 1, tiHi, .4, .35),
+  mk(lathe([[2.04, .48], [2.14, .38], [2.14, .34], [2.04, .34]], 72), steelP, 1, .08, I, null, 1, steelP, .3),
+  mk(lathe([[1.70, .22], [1.78, .36], [1.78, .48], [1.70, .22]], 72), steelP, 1, .10, I, null, 1, steelP, .25),
+  mk(merge([...Array(8)].map((_, i) => {
+    const a = i * TAU / 8, r = 1.94;
+    const screwHead = lathe([[0, 0], [0.042, 0], [0.045, 0.016], [0, 0.016]], 16);
+    const slot = extrude(rect(0.008, 0.038), 0.01);
+    shift(slot, 0, 0.014, 0);
+    const sc = merge([screwHead, slot]);
+    return bake(sc, mul(T(Math.cos(a) * r, 0.482, Math.sin(a) * r), RY(-a)));
+  })), steelP, 1, .12),
+  mk(merge([...Array(60)].map((_, i) => {
+    const a = i * TAU / 60, is5Min = i % 5 === 0;
+    return bake(extrude(rect(is5Min ? .075 : .042, .004), .008), mul(T(Math.cos(a) * 1.86, .484, Math.sin(a) * 1.86), RY(-a)));
+  })), dark, .3, .4),
+  mk(bake(extrude([[.11, .055], [.11, -.055], [-.12, 0]], .024), mul(T(0, .485, -1.86), RY(Math.PI / 2))), champ, 1, .18),
+  mk(bake(lathe([[0, 0], [.032, 0], [.032, .016], [0, .016]], 16), mul(T(0, .495, -1.86), RY(Math.PI / 2))), cyanL, 0, .45)
+]);
+
+// 3. HANDS (Faceted 3D Dauphine hands with Super-LumiNova and ruby pinion)
+part('hands', [0, 2.8, 0], [
+  hand(1.15, .095, .20, .048, champ, 'h'),
+  lume(.72, .41, 'h', .016),
+  hand(1.62, .076, .20, .048, champ, 'm'),
+  lume(1.12, .47, 'm', .013),
+  mk(extrude([[-.010, .46], [.010, .46], [.006, -1.70], [-.006, -1.70]], .024), vioSec, 1, .18, T(0, .51, 0), () => RY(-A.s)),
+  mk(shift(extrude(rect(.020, .085), .026), 0, 0, -1.65), cyanL, 0, .4, T(0, .51, 0), () => RY(-A.s)),
+  mk(shift(lathe([[.030, 0], [.085, 0], [.085, .024], [.030, .024]], 32), 0, 0, .32), champ, 1, .20, T(0, .51, 0), () => RY(-A.s)),
+  mk(lathe([[0, 0], [.052, 0], [.052, .022], [0, .022]], 24), rose, 1, .14, T(0, .522, 0)),
+  mk(lathe([[0, 0], [.024, 0], [.024, .015], [0, .015]], 16), ruby, .25, .12, T(0, .540, 0))
+]);
+
+// 4. DIAL (Deep Imperial Midnight Blue Sunburst, Applied Hour Markers, Date, Moonphase & Open-Heart)
+const dateW = dateWindowGeo(), moonP = moonphaseGeo();
+part('dial', [0, 1.8, 0], [
+  mk(lathe([[0, .16], [1.70, .16], [1.70, .195], [0, .195]], 72), midBlue, .85, .16, I, null, 1, midBlueHi, .7, .85, 1),
+  mk(lathe([[1.42, .195], [1.70, .195], [1.70, .225], [1.42, .225]], 72), plateDk, .88, .26, I, null, 1, tiHi, .3, .4),
+  mk(merge([ring(1.44, 1.455, .226, .228), ring(1.64, 1.655, .226, .228)]), dark, .3, .4),
+  mk(merge([...Array(60)].filter((_, i) => i % 5 !== 0).map((_, i) => {
+    const a = (i + Math.floor(i / 4) + 1) * TAU / 60;
+    return bake(extrude(rect(.0035, .032), .008), mul(T(Math.cos(a) * 1.55, .227, Math.sin(a) * 1.55), RY(-a)));
+  })), steelP, 1, .2),
+  mk(merge([...Array(12)].map((_, i) => {
+    const a = i * TAU / 12;
+    return bake(extrude(rect(.006, .058), .010), mul(T(Math.cos(a) * 1.55, .227, Math.sin(a) * 1.55), RY(-a)));
+  })), champHi, 1, .15),
+  mk(appliedIndicesGeo(), champ, 1, .12, I, null, 1, champHi, .4),
+  mk(appliedLumeGeo(), cyanL, 0, .45, I, null, 1, cyanL, 0.95),
+  // Recessed Open-Heart Aperture Cavity
+  mk(shift(lathe([[0, .12], [.37, .12], [.37, .194], [0, .194]], 32), -.52, 0, .48), dark, .2, .5),
+  mk(openHeartFrameGeo(), champ, 1, .14, I, null, 1, champHi, .35),
+  // Astronomical Moonphase Aperture
+  mk(moonP.gold, champ, 1, .12, I, null, 1, champHi, .35),
+  mk(moonP.sky, midBlue, .85, .18, I, null, 1, midBlueHi, .5),
+  mk(moonP.mask, midBlue, .85, .18, I, null, 1, midBlueHi, .5),
+  mk(dateW.frame, champ, 1, .14, I, null, 1, champHi, .35),
+  mk(dateW.disc, whiteDial, .1, .3),
+  mk(dateW.numerals, dark, .3, .5),
+  mk(bake(extrude(rect(.16, .050), .018), T(0, .215, -.95)), champ, 1, .16, I, null, 1, champHi, .35)
+]);
+
+// 5. MOVEMENT (Haute horlogerie caliber with Geneva stripes, perlage & tourbillon-inspired balance)
+part('movement', [0, .9, 0], [
+  mk(lathe([[0, -.50], [1.62, -.50], [1.62, -.12], [0, -.12]], 64), plateDk, .75, .42, I, null, 1, [.28, .34, .52], .35),
+  mk(lathe([[0, -.3], [.6, -.3], [.6, -.07], [0, -.07]], 48), bz, 1, .26, T(-.537, .05, -.31), null, 1, [.92, .64, .32], .25, .35),
+  mk(extrude(gearPoly(36, .58, .51), .022), champ, 1, .20, T(-.537, .075, -.31)),
+  mk(merge([...Array(5)].map((_, i) => {
+    const a = i * TAU / 5;
+    return bake(extrude(rect(.22, .024), .018), mul(T(-.537 + Math.cos(a) * .25, .085, -.31 + Math.sin(a) * .25), RY(-a)));
+  })), champ, 1, .18),
+  spin(28, .62, .54, -.82, -.06, -.475, -2.2, champ),
+  spin(24, .55, .47, .69, -.07, -.4, 2.2, rose),
+  spin(18, .38, .31, 0, -.08, 1.05, -3.1, steelP),
+  spin(15, .24, .18, .32, -.07, .55, 4.4, steelP),
+  // Balance Wheel Assembly inside Open-Heart Aperture at (-0.52, 0.13, 0.48) [matching HS.balance]
+  mk(lathe([[.28, -.02], [.36, -.02], [.36, .014], [.28, .014]], 36), champ, 1, .12, T(-.52, .13, .48), () => RY(A.bal)),
+  mk(merge([...Array(3)].map((_, i) => {
+    const a = i * TAU / 3;
+    return bake(extrude(rect(.16, .020), .014), mul(T(Math.cos(a) * .15, .138, Math.sin(a) * .15), RY(-a)));
+  })), rose, 1, .22, T(-.52, 0, .48), () => RY(A.bal)),
+  mk(merge([...Array(16)].map((_, i) => {
+    const a = i * TAU / 16;
+    return bake(lathe([[0, 0], [.016, 0], [.016, .018], [0, .018]], 8), T(Math.cos(a) * .35, .135, Math.sin(a) * .35));
+  })), champ, 1, .12, T(-.52, 0, .48), () => RY(A.bal)),
+  mk(lathe([[.07, .13], [.20, .13], [.20, .138], [.07, .138]], 28), blueScrew, 1, .18, T(-.52, 0, .48), () => RY(A.bal * 1.5)),
+  mk(lathe([[0, .13], [.065, .13], [.065, .155], [0, .155]], 20), rose, 1, .16, T(-.52, 0, .48), () => RY(A.bal)),
+  mk(lathe([[0, .16], [.028, .16], [.028, .178], [0, .178]], 16), ruby, .25, .12, T(-.52, 0, .48)),
+  mk(lathe([[.52, .052], [1.18, .052], [1.18, .078], [.52, .078]], 30, 0, 66 * D, 114 * D), rose, 1, .22, I, null, 1, [1, .72, .48], .3),
+  mk(bake(extrude(rect(.32, .038), .024), mul(T(0, .074, .94), RY(Math.PI / 2))), rose, 1, .20, I, null, 1, [1, .72, .48], .3),
+  mk(lathe([[.68, -.02], [1.25, -.02], [1.25, .006], [.68, .006]], 30, 0, 188 * D, 232 * D), steel, .95, .24, I, null, 1, [.65, .75, .95], .2),
+  mk(merge([
+    ...Array(4).fill(0).map((_, i) => {
+      const a = (190 + 22 * i) * D;
+      return bake(lathe([[0, 0], [.042, 0], [.042, .024], [0, .024]], 14), T(Math.cos(a) * .9, .006, Math.sin(a) * .9));
+    }),
+    ...Array(4).fill(0).map((_, i) => {
+      const a = (60 + 32 * i) * D;
+      return bake(lathe([[0, 0], [.04, 0], [.04, .022], [0, .022]], 14), T(Math.cos(a) * .96, .078, Math.sin(a) * .96));
+    })
+  ]), ruby, .25, .14),
+  mk(merge([[202, .006, 1.16], [218, .006, 1.16], [72, .078, 1.05], [108, .078, 1.05], [-0.5, -.06, 0.4], [130, .05, 0.8]].map(([ad, y, r]) => {
+    const a = ad * D;
+    return bake(lathe([[0, 0], [.048, 0], [.048, .02], [0, .02]], 12), T(Math.cos(a) * r, y, Math.sin(a) * r));
+  })), blueScrew, .95, .16)
+]);
+
+// 6. CASE (Sculpted 41mm titanium case, beveled anglage & organic curved lugs)
+part('case', [0, -.8, 0], [
+  mk(lathe([[0, -.46], [1.5, -.44], [1.88, -.34], [2.02, -.18], [2.08, 0], [2.04, .18], [2.08, .26], [1.78, .26], [1.78, -.44], [1.70, -.46], [0, -.46]], 72), ti, .94, .36, I, null, 1, tiHi, .45, .35),
+  mk(lathe([[1.74, .24], [2.10, .24], [2.10, .28], [1.74, .28]], 72), steelP, 1, .10),
+  mk(ring(1.74, 1.88, -.40, -.34, 64), rose, 1, .22),
+  mk(sculptedLug(-0.92, -1), ti, .94, .35, I, null, 1, tiHi, .45, .35),
+  mk(sculptedLug(0.92, -1), ti, .94, .35, I, null, 1, tiHi, .45, .35),
+  mk(sculptedLug(-0.92, 1), ti, .94, .35, I, null, 1, tiHi, .45, .35),
+  mk(sculptedLug(0.92, 1), ti, .94, .35, I, null, 1, tiHi, .45, .35),
+  mk(bake(extrude([[1.78, -.20], [2.14, -.16], [2.14, -.05], [1.86, -.05]], .22), T(0, -.03, 0)), ti, .94, .35, I, null, 1, tiHi, .45),
+  mk(bake(extrude([[1.78, .05], [2.14, .05], [2.14, .16], [1.86, .20]], .22), T(0, -.03, 0)), ti, .94, .35, I, null, 1, tiHi, .45),
+  mk(merge([[1.12, -2.40, -1], [1.12, 2.40, -1], [-1.12, -2.40, 1], [-1.12, 2.40, 1]].map(([x, z, s]) =>
+    bake(lathe([[0, 0], [.050, 0], [.050, .022], [0, .022]], 16), mul(T(x, -.10, z), RZ(s * Math.PI / 2)))
+  )), steelP, 1, .18)
+]);
+
+// 7. STRAP (Integrated Articulated Titanium Bracelet with Polished Center Links & Clasp)
+const brTop = buildBracelet(true), brBot = buildBracelet(false);
+part('strap', [0, -1.9, 0], [
+  mk(merge([brTop.outer, brBot.outer]), ti, .94, .32, I, null, 1, tiHi, .4, .4),
+  mk(merge([brTop.center, brBot.center]), champ, 1, .12, I, null, 1, champHi, .35),
+  mk(bake(extrude(rect(.82, .18), .14), T(0, -1.05, 4.4)), ti, .94, .30, I, null, 1, tiHi, .4),
+  mk(bake(extrude(rect(.22, .06), .04), T(0, -.95, 4.4)), champ, 1, .16)
+]);
+
+// 8. CASEBACK (Exhibition sapphire display back with tungsten & 22k gold winding rotor)
+part('caseback', [0, -3.4, 0], [
+  mk(lathe([[1.20, -.55], [1.68, -.55], [1.68, -.48], [1.20, -.48]], 64), ti, .95, .28, I, null, 1, tiHi, .3),
+  mk(ring(1.28, 1.46, -.56, -.53, 64), rose, 1, .24),
+  mk(lathe([[0, -.545], [1.22, -.545], [1.22, -.535], [0, -.535]], 40), [.82, .92, 1.0], 0, .04, I, null, .18),
+  mk(lathe([[.44, -.53], [1.25, -.53], [1.25, -.50], [.44, -.50]], 36, 0, 0, Math.PI), champ, 1, .20, I, () => RY(A.a * 1.8), 1, champHi, .35),
+  mk(merge([...Array(6)].map((_, i) => {
+    const a = i * TAU / 6;
+    return bake(lathe([[0, -.56], [.042, -.56], [.042, -.54], [0, -.54]], 12), T(Math.cos(a) * 1.54, 0, Math.sin(a) * 1.54));
+  })), steelP, 1, .18)
+]);
+
+// 9. CROWN (Fluted screw-down titanium crown with emerald cabochon)
+part('crown', [1.3, 0, 0], [
+  mk(lathe([[0, 0], [.22, 0], [.26, .05], [.26, .38], [.2, .44], [0, .44]], 40), ti, .94, .34, crownM, null, 1, tiHi, .4, .25),
+  mk(lathe([[.24, .30], [.28, .30], [.28, .36], [.24, .36]], 40), rose, 1, .22, crownM),
+  mk(merge([...Array(28)].map((_, i) => {
+    const a = i * TAU / 28;
+    return bake(extrude(rect(.038, .012), .075), mul(crownM, mul(T(Math.cos(a) * .27, .21, Math.sin(a) * .27), RY(-a))));
+  })), steelP, 1, .14),
+  mk(lathe([[0, .44], [.065, .44], [.065, .485], [0, .485]], 24), emer, .2, .10, crownM, null, 1, emerHi, .6)
+]);
+
+const HS = {
+  crystal: [[0, .58, 0], 'crystal', 'Domed sapphire crystal with multi-layer anti-reflective coating, drawn as a transparent shell over the dial.', [16, 16]],
+  hands: [[-.3, .45, -.5], 'hands', 'Faceted 3D Dauphine blades in rose gold and champagne, with cyan Super-LumiNova inlays. The violet needle seconds hand sweeps eight beats a second.', [16, -34]],
+  barrel: [[-.537, .05, -.31], 'movement', 'The mainspring barrel, finished in warm brushed bronze with an openworked champagne gold ratchet wheel.', [16, -22]],
+  balance: [[-.52, .18, .48], 'movement', 'The balance wheel swings four times a second (28,800 vibrations per hour) inside a tourbillon-inspired steel cage with 16 regulating inertia screws. It cannot run backwards: reverse mode is a visual simulation.', [16, -22]],
+  crown: [[2.32, .1, 0], 'crown', 'A screw-down style crown with 28 knurled titanium grip teeth, a rose-gold accent groove, and an inset emerald cabochon.', [16, -22]]
+};
+
+const tris = parts.reduce((s, p) => s + p.ms.reduce((t, m) => t + m.g.i.length / 3, 0), 0);
+
