@@ -121,3 +121,21 @@
   <span>Grade 5 titanium — 41 mm — royal midnight sapphire — 28,800 vph · 4 Hz — 31 jewels — hand-beveled anglage — moonphase &amp; open heart — piece unique 001/001 — </span>
 </div></div>
 </section>
+
+<section id="time" class="r" data-visible="false"><div class="panel">
+  <p class="eyebrow">01 — Simulated time</p>
+  <h2>Hold a second.</h2>
+  <p>Steer high-precision simulated time. Pause the sweeping seconds hand, reverse the mechanical cycle, or scrub smoothly across time without disturbing the real clock.</p>
+  <p class="clock" id="clock" role="timer" aria-label="Watch time">--:--:--</p>
+  <p class="beatline" id="beatline" aria-hidden="true"><span class="beat"></span>4 Hz · 28,800 vibrations per hour</p>
+  <p class="mode" id="mode" aria-live="polite">Live time</p>
+  <div class="row" role="group" aria-label="Time controls">
+    <button class="btn" data-r="-4" aria-pressed="false">Reverse</button>
+    <button class="btn" data-r="0" aria-pressed="false">Pause</button>
+    <button class="btn" data-r="0.25" aria-pressed="false">Slow</button>
+    <button class="btn" data-r="1" aria-pressed="false">Play</button>
+    <button class="btn" data-r="8" aria-pressed="false">Fast</button>
+  </div>
+  <label class="scrub">Scrub simulated time <input id="scrub" type="range" min="-720" max="720" value="0" step="1" aria-valuetext="Live time"></label>
+  <p><button class="btn" id="live" aria-pressed="true">Return to live time</button></p>
+</div></section>
