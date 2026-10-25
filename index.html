@@ -77,3 +77,30 @@
     <circle r="4" fill="#E8C9A6"/>
   </svg>
 </div>
+
+<div id="hotspots" role="group" aria-label="Watch parts">
+  <button class="hs" data-k="crystal">Crystal</button><button class="hs" data-k="hands">Hands</button><button class="hs" data-k="barrel">Barrel</button><button class="hs" data-k="balance">Balance wheel</button><button class="hs" data-k="crown">Crown</button>
+</div>
+<div id="exl" aria-hidden="true"></div>
+<svg id="leader" aria-hidden="true">
+  <line id="lline" x1="0" y1="0" x2="0" y2="0"></line>
+  <circle id="ldot" r="3"></circle>
+  <circle id="lseat" r="5"></circle>
+</svg>
+<p id="ipl" aria-hidden="true"></p>
+<div id="ipanel" role="group" aria-label="Component inspection" hidden>
+  <div class="ip-top">
+    <span class="ip-name" id="ip-name"></span>
+    <button type="button" class="ip-x" id="ip-x" aria-label="Close the component panel">×</button>
+  </div>
+  <p class="ip-desc" id="ip-desc"></p>
+  <p class="ip-tag" id="ip-tag" aria-live="polite"></p>
+  <div class="ip-acts">
+    <button type="button" class="ip-btn" id="ip-pull">Remove component</button>
+    <button type="button" class="ip-btn" id="ip-insp">Inspect closer</button>
+    <button type="button" class="ip-btn ip-alt" id="ip-all">Reassemble watch</button>
+  </div>
+  <p class="ip-keys">Drag the part to pull it out · hold ⇧ and drag to rotate · Esc returns it</p>
+</div>
+<p id="hint" aria-hidden="true">Drag to orbit · click a part to remove it · <span aria-hidden="true">+ −</span> zoom · <span aria-hidden="true">0</span> resets</p>
+
