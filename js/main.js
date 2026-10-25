@@ -955,3 +955,177 @@ function initGL() {
     }
   };
 }
+
+// ---------- Page wiring ----------
+let R = null;
+const exEl = $('#ex'), reEl = $('#re'), exNote = $('#ex-note');
+function fallback() {
+  R = null;
+  document.documentElement.classList.remove('gl');
+  document.documentElement.classList.add('no-gl');
+  exEl.disabled = reEl.disabled = true;
+  exNote.hidden = false;
+}
+try {
+  R = initGL();
+  document.documentElement.classList.add('gl');
+} catch (e) {
+  console.info('3D disabled:', e.message);
+  fallback();
+}
+
+const SECTIONS = $$('main section');
+const SEC_ORDER = ['reveal', 'time', 'inside', 'explode', 'craft'];
+
+// Active-chapter marking for every in-page nav (header, rail, footer)
+const navLinks = $$('header nav a, #rail a, .foot-nav a');
+function markNav(id) {
+  const h = '#' + id;
+  navLinks.forEach(a => {
+    if (a.getAttribute('href') === h) a.setAttribute('aria-current', 'true');
+    else a.removeAttribute('aria-current');
+  });
+}
+markNav(st.cur);
+
+// Active chapter = the section covering the viewport mid-line. This is monotonic —
+// one switch per boundary crossing — unlike a threshold observer, whose entries fire
+// on both edges and made the staged camera wobble mid-scroll.
+let secTop = [];
+const measureSecs = () => { secTop = SECTIONS.map(s => s.getBoundingClientRect().top + scrollY); };
+let lastAct = st.cur;
+function updateActive() {
+  const mid = scrollY + innerHeight * .5;
+  let cur = SECTIONS[0].id;
+  for (let i = 0; i < SECTIONS.length; i++) if (secTop[i] <= mid) cur = SECTIONS[i].id;
+  if (cur === lastAct) return;
+  lastAct = st.cur = cur;
+  document.body.dataset.sec = cur;
+  st.mE = null;
+  if (cur !== 'inside') { cam.ua = cam.ue = 0; cam.uz = 1; }
+  markNav(cur);
+  measureStage();
+}
+
+// Keep the reading text off the watch while scrolling.
+//  Side-by-side layouts: dissolve a card only while the watch actually crosses over it.
+//  Bottom-sheet layouts: mask a card where its top slides over the watch — the part below
+//  the watch stays fully readable, so a card can never cover the watch while scrolling.
+// Panel rects are cached on scroll/layout changes; the fade is re-applied every frame
+// (the watch box also moves while the camera eases, e.g. during a side crossing).
+const PANELS = SECTIONS.map(s => s.querySelector('.panel'));
+const PRECT = SECTIONS.map(() => null);
+const measurePanels = () => {
+  SECTIONS.forEach((sec, i) => {
+    PRECT[i] = sec.dataset.visible === 'true' ? PANELS[i].getBoundingClientRect() : null;
+  });
+};
+function applyFades() {
+  const bx = STAGE.box;
+  SECTIONS.forEach((sec, i) => {
+    const p = PANELS[i], r = PRECT[i];
+    if (!r) return;
+    const off = r.bottom < -40 || r.top > innerHeight + 40;
+    if (STAGE.sheet) {
+      if (p.dataset.fd) { p.style.opacity = ''; p.style.transition = ''; p.style.pointerEvents = ''; delete p.dataset.fd; delete p.dataset.fv; }
+      const L = off || !bx ? 0 : Math.round(bx[3] + 4 - r.top);
+      if (L > 2) {
+        const g = 'linear-gradient(to bottom, transparent ' + Math.max(0, L - 34) + 'px, #000 ' + L + 'px)';
+        if (p.dataset.mk !== g) { p.style.maskImage = g; p.style.webkitMaskImage = g; p.dataset.mk = g; }
+      } else if (p.dataset.mk) {
+        p.style.maskImage = ''; p.style.webkitMaskImage = ''; delete p.dataset.mk;
+      }
+      return;
+    }
+    if (p.dataset.mk) { p.style.maskImage = ''; p.style.webkitMaskImage = ''; delete p.dataset.mk; }
+    let f = 1;
+    if (!off && bx) {
+      const ix = Math.min(r.right, bx[2] + 8) - Math.max(r.left, bx[0] - 8);
+      const iy = Math.min(r.bottom, bx[3] + 8) - Math.max(r.top, bx[1] - 8);
+      if (ix > 0 && iy > 0) {
+        const A = Math.max((bx[2] - bx[0]) * (bx[3] - bx[1]), 1);
+        f = clamp(1 - ix * iy / (A * .13), 0, 1);
+      }
+    }
+    if (f < .995) {
+      const pv = f.toFixed(3);
+      if (!p.dataset.fd) { p.style.transition = RM ? 'none' : 'opacity .22s linear'; p.dataset.fd = '1'; }
+      if (p.dataset.fv !== pv) {
+        p.style.opacity = pv;
+        p.style.pointerEvents = f < .25 ? 'none' : '';
+        p.dataset.fv = pv;
+      }
+    } else if (p.dataset.fd) {
+      p.style.opacity = ''; p.style.transition = ''; p.style.pointerEvents = '';
+      delete p.dataset.fd; delete p.dataset.fv;
+    }
+  });
+}
+
+if (typeof IntersectionObserver === 'function') {
+  const vio = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.dataset.visible = 'true';
+      vio.unobserve(e.target);
+      measurePanels();
+    }
+  }), { threshold: .2, rootMargin: '0px 0px -6% 0px' });
+
+  SECTIONS.forEach(sec => vio.observe(sec));
+} else {
+  SECTIONS.forEach(sec => sec.dataset.visible = 'true');
+}
+measureSecs();
+updateActive();
+
+// Controls
+const modeEl = $('#mode'), clockEl = $('#clock'), beatEl = $('#beatline'), scrub = $('#scrub'), rateBtns = $$('[data-r]'), liveBtn = $('#live');
+const sync = () => {
+  const m = sim.label();
+  if (modeEl.textContent !== m) modeEl.textContent = m;
+  scrub.setAttribute('aria-valuetext', m);
+  rateBtns.forEach(b => b.setAttribute('aria-pressed', String(!sim.live && sim.rate === +b.dataset.r)));
+  liveBtn.setAttribute('aria-pressed', String(sim.live));
+  beatEl.classList.toggle('still', !(sim.live || sim.rate > 0));
+};
+rateBtns.forEach(b => b.addEventListener('click', () => { sim.setRate(+b.dataset.r); sync(); }));
+liveBtn.addEventListener('click', () => { sim.goLive(); scrub.value = 0; sync(); });
+scrub.addEventListener('input', () => { sim.offset(+scrub.value); sync(); });
+
+const act = {
+  left: () => cam.ua += .15,
+  right: () => cam.ua -= .15,
+  in: () => cam.uz = clamp(cam.uz * .88, .55, 1.6),
+  out: () => cam.uz = clamp(cam.uz * 1.14, .55, 1.6),
+  reset: () => { cam.ua = cam.ue = 0; cam.uz = 1; }
+};
+$$('[data-act]').forEach(b => b.addEventListener('click', () => act[b.dataset.act]()));
+
+const cv = $('#gl');
+
+exEl.addEventListener('input', e => st.mE = e.target.value / 100);
+reEl.addEventListener('click', () => { st.mE = 0; });
+
+const hsBtns = $$('.hs'), hsInfo = $('#hs-info');
+const HS_XY = [0, 0, false];
+const hsData = hsBtns.map(b => ({
+  b,
+  v: HS[b.dataset.k][0],
+  p: parts.find(q => q.id === HS[b.dataset.k][1]),
+  ox: HS[b.dataset.k][3][0],
+  oy: HS[b.dataset.k][3][1],
+  px: 0,
+  py: 0,
+  shown: null,
+  w: 0,
+  h: 0
+}));
+
+hsBtns.forEach(b => {
+  b.setAttribute('aria-pressed', 'false');
+  b.addEventListener('click', () => {
+    hsBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    hsInfo.textContent = `${b.textContent}. ${HS[b.dataset.k][2]}`;
+  });
+});
+
