@@ -1129,3 +1129,460 @@ hsBtns.forEach(b => {
   });
 });
 
+// ---------- Interactive component removal: hover, select, grab, inspect, return ----------
+// Parts keep their authored transforms untouched. Every manual pose is layered at render time in
+// part space (translation along a constrained extraction axis + spin about the part's own axis),
+// so a returned component is bit-exact again — no drift after any number of remove/return cycles.
+const PMETA = {
+  crystal:  ['Sapphire crystal', 'Domed sapphire with a multi-layer antireflective coating. Removing it exposes the dial and hands beneath.', 3.4],
+  bezel:    ['Bezel', 'Brushed titanium ring with a polished chamfer, eight hex screws and luminous five-minute markers.', 2.9],
+  hands:    ['Hands', 'Faceted Dauphine blades with Super-LumiNova inlays and the sweeping violet seconds needle.', 2.3],
+  dial:     ['Dial', 'Midnight-blue sunburst dial with applied gold indices, an open-heart aperture and the moonphase.', 1.7],
+  movement: ['Movement', 'Hand-finished caliber: Geneva stripes, perlage, mainspring barrel, gear train and balance wheel.', 1.3],
+  case:     ['Case', 'Forty-one millimetre sculpted titanium case with beveled anglage and four curved lugs.', 1.5],
+  strap:    ['Bracelet', 'Integrated articulated titanium bracelet with polished centre links and a folding clasp.', 1.7],
+  caseback: ['Case back', 'Exhibition back with a sapphire window and a 22-karat gold winding rotor.', 2.4],
+  crown:    ['Crown', 'Screw-down crown with twenty-eight knurled teeth, a rose-gold groove and an emerald cabochon.', 1.1]
+};
+
+const INSP = {
+  selP: null, hovP: null, dragP: null, hold: null, fw: 0, fwT: 0, insp: false, sec: st.cur,
+  focus: [0, 0, 0], mx: -1, my: -1, dirty: false, sd: [0, -1], wpp: 200, drag: null
+};
+const partById = id => parts.find(p => p.id === id);
+const V = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+
+// Local bounds + centroid per part (part space, authored meshes only)
+parts.forEach(p => {
+  const M = PMETA[p.id];
+  p.nm = M[0]; p.ds = M[1]; p.max = M[2];
+  p.ax = V(p.ex);
+  p.lw = Math.abs(p.ax[1]) > .9 ? [1, 0, 0] : Math.abs(p.ax[0]) > .9 ? [0, 0, 1] : [0, 1, 0];
+  const a = [1e9, 1e9, 1e9], b = [-1e9, -1e9, -1e9];
+  p.ms.forEach(m => {
+    const q = m.g.p, A = m.M;
+    for (let i = 0; i < q.length; i += 3) {
+      const x = A[0] * q[i] + A[4] * q[i + 1] + A[8] * q[i + 2] + A[12],
+        y = A[1] * q[i] + A[5] * q[i + 1] + A[9] * q[i + 2] + A[13],
+        z = A[2] * q[i] + A[6] * q[i + 1] + A[10] * q[i + 2] + A[14];
+      if (x < a[0]) a[0] = x; if (x > b[0]) b[0] = x;
+      if (y < a[1]) a[1] = y; if (y > b[1]) b[1] = y;
+      if (z < a[2]) a[2] = z; if (z > b[2]) b[2] = z;
+    }
+  });
+  p.bb = { a, b };
+  p.ct = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  p.pull = 0; p.pullT = 0; p.lat = 0; p.latT = 0; p.rot = 0; p.rotT = 0; p.tilt = 0; p.tiltT = 0;
+  p.off = [0, 0, 0]; p.ld = [1, 0, 0]; p.mm = new Float32Array(16); p.mmOn = false; p.ho = 0; p.wasOut = false;
+});
+
+// --- matrix helpers (column-major, matching mul/T/RY) ---
+const MM_A = new Float32Array(16), MM_B = new Float32Array(16), MM_R = new Float32Array(16);
+const axRot = (u, ang, out) => {
+  const x = u[0], y = u[1], z = u[2], c = Math.cos(ang), s = Math.sin(ang), t = 1 - c;
+  out[0] = t * x * x + c; out[1] = t * x * y + s * z; out[2] = t * x * z - s * y; out[3] = 0;
+  out[4] = t * x * y - s * z; out[5] = t * y * y + c; out[6] = t * y * z + s * x; out[7] = 0;
+  out[8] = t * x * z + s * y; out[9] = t * y * z - s * x; out[10] = t * z * z + c; out[11] = 0;
+  out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
+  return out;
+};
+const inv4 = (m, o) => {
+  const a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3], a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7],
+    a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11], a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15],
+    b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11,
+    b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30,
+    b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return null;
+  det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+};
+const composeMan = p => { // p.mm = T(off) · R(spin, tilt) about the part centroid
+  axRot(p.ax, p.rot, MM_A);
+  if (p.tilt) { axRot(p.lw, p.tilt, MM_B); mul(MM_B, MM_A, MM_R); } else MM_R.set(MM_A);
+  const c = p.ct, R = MM_R, m = p.mm;
+  m[0] = R[0]; m[1] = R[1]; m[2] = R[2]; m[3] = 0;
+  m[4] = R[4]; m[5] = R[5]; m[6] = R[6]; m[7] = 0;
+  m[8] = R[8]; m[9] = R[9]; m[10] = R[10]; m[11] = 0;
+  m[12] = p.off[0] + c[0] - (R[0] * c[0] + R[4] * c[1] + R[8] * c[2]);
+  m[13] = p.off[1] + c[1] - (R[1] * c[0] + R[5] * c[1] + R[9] * c[2]);
+  m[14] = p.off[2] + c[2] - (R[2] * c[0] + R[6] * c[1] + R[10] * c[2]);
+  m[15] = 1;
+  return m;
+};
+const worldC = (p, out) => {
+  out[0] = p.ct[0] + p.off[0] + p.ex[0] * cam.E;
+  out[1] = p.ct[1] + p.off[1] + p.ex[1] * cam.E;
+  out[2] = p.ct[2] + p.off[2] + p.ex[2] * cam.E;
+  return out;
+};
+
+// --- CPU ray casting (screen-to-geometry picking against the live transforms) ---
+const PKI = new Float32Array(16), PKW = new Float32Array(16), PKL = new Float32Array(16), PKT = new Float32Array(16);
+const PKA = [0, 0, 0], PKB = [0, 0, 0];
+function pickPart(px, py) {
+  const pr = projLast;
+  if (!pr || !pr.vp || !inv4(pr.vp, PKI)) return null;
+  const nx = px / pr.w * 2 - 1, ny = 1 - py / pr.h * 2;
+  const unp = (z, out) => {
+    const x = PKI[0] * nx + PKI[4] * ny + PKI[8] * z + PKI[12];
+    const y = PKI[1] * nx + PKI[5] * ny + PKI[9] * z + PKI[13];
+    const w = PKI[3] * nx + PKI[7] * ny + PKI[11] * z + PKI[15];
+    const q = PKI[2] * nx + PKI[6] * ny + PKI[10] * z + PKI[14];
+    out[0] = x / w; out[1] = y / w; out[2] = q / w;
+  };
+  unp(-1, PKA); unp(1, PKB);
+  let dx = PKB[0] - PKA[0], dy = PKB[1] - PKA[1], dz = PKB[2] - PKA[2];
+  const dl = Math.hypot(dx, dy, dz) || 1; dx /= dl; dy /= dl; dz /= dl;
+  const ox = PKA[0], oy = PKA[1], oz = PKA[2];
+
+  const cand = [];
+  for (const p of parts) {
+    if (p.mmOn) PKW.set(p.mm); else PKW.set(I);
+    PKW[12] += p.ex[0] * cam.E; PKW[13] += p.ex[1] * cam.E; PKW[14] += p.ex[2] * cam.E;
+    if (!inv4(PKW, PKI)) continue;
+    const e = PKI;
+    const rox = e[0] * ox + e[4] * oy + e[8] * oz + e[12], roy = e[1] * ox + e[5] * oy + e[9] * oz + e[13],
+      roz = e[2] * ox + e[6] * oy + e[10] * oz + e[14];
+    const rdx = e[0] * dx + e[4] * dy + e[8] * dz, rdy = e[1] * dx + e[5] * dy + e[9] * dz,
+      rdz = e[2] * dx + e[6] * dy + e[10] * dz;
+    const o3 = [rox, roy, roz], d3 = [rdx, rdy, rdz];
+    let t0 = 0, t1 = 1e9, ok = true;
+    for (let k = 0; k < 3 && ok; k++) {
+      const dd = d3[k], od = o3[k], mn = p.bb.a[k], mx = p.bb.b[k];
+      if (Math.abs(dd) < 1e-9) { if (od < mn || od > mx) ok = false; }
+      else {
+        let ta = (mn - od) / dd, tb = (mx - od) / dd;
+        if (ta > tb) { const s = ta; ta = tb; tb = s; }
+        if (ta > t0) t0 = ta;
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) ok = false;
+      }
+    }
+    if (ok && t1 > 0) cand.push({ p, t: t0, o: o3, d: d3, inv: e.slice() });
+  }
+  if (!cand.length) return null;
+  cand.sort((a, b) => a.t - b.t);
+
+  let bestP = null, bestT = Infinity;
+  for (const c of cand) {
+    if (c.t >= bestT) break;
+    const t = triHit(c);
+    if (t < bestT) { bestT = t; bestP = c.p; }
+  }
+  return bestP;
+}
+function triHit(c) { // nearest live triangle against the ray, in part space
+  let best = Infinity;
+  for (const m of c.p.ms) {
+    const f = m.f ? m.f() : I;
+    mul(m.M, f, PKL);
+    if (f !== I) releaseMat(f);
+    if (!inv4(PKL, PKT)) continue;
+    const A = PKT;
+    const ox = A[0] * c.o[0] + A[4] * c.o[1] + A[8] * c.o[2] + A[12],
+      oy = A[1] * c.o[0] + A[5] * c.o[1] + A[9] * c.o[2] + A[13],
+      oz = A[2] * c.o[0] + A[6] * c.o[1] + A[10] * c.o[2] + A[14];
+    const dx = A[0] * c.d[0] + A[4] * c.d[1] + A[8] * c.d[2],
+      dy = A[1] * c.d[0] + A[5] * c.d[1] + A[9] * c.d[2],
+      dz = A[2] * c.d[0] + A[6] * c.d[1] + A[10] * c.d[2];
+    const q = m.g.p, IX = m.g.i;
+    for (let k = 0; k < IX.length; k += 3) {
+      const i0 = IX[k] * 3, i1 = IX[k + 1] * 3, i2 = IX[k + 2] * 3;
+      const ax = q[i0], ay = q[i0 + 1], az = q[i0 + 2],
+        e1x = q[i1] - ax, e1y = q[i1 + 1] - ay, e1z = q[i1 + 2] - az,
+        e2x = q[i2] - ax, e2y = q[i2 + 1] - ay, e2z = q[i2 + 2] - az,
+        hx = dy * e2z - dz * e2y, hy = dz * e2x - dx * e2z, hz = dx * e2y - dy * e2x,
+        det = e1x * hx + e1y * hy + e1z * hz;
+      if (det > -1e-9 && det < 1e-9) continue;
+      const fa = 1 / det, sx = ox - ax, sy = oy - ay, sz = oz - az,
+        u = fa * (sx * hx + sy * hy + sz * hz);
+      if (u < 0 || u > 1) continue;
+      const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x,
+        v = fa * (dx * qx + dy * qy + dz * qz);
+      if (v < 0 || u + v > 1) continue;
+      const t = fa * (e2x * qx + e2y * qy + e2z * qz);
+      if (t > 1e-4 && t < best) best = t;
+    }
+  }
+  return best;
+}
+
+// --- interaction state ---
+const isOut = p => p.pullT > .02 || p.pull > .02 || Math.abs(p.latT) > .02 || Math.abs(p.lat) > .02;
+const ipanel = $('#ipanel'), ipName = $('#ip-name'), ipDesc = $('#ip-desc'), ipTag = $('#ip-tag'),
+  ipPull = $('#ip-pull'), ipInsp = $('#ip-insp'), ipAll = $('#ip-all'), ipX = $('#ip-x'),
+  ipl = $('#ipl'), leader = $('#leader'), lline = $('#lline'), ldot = $('#ldot'), lseat = $('#lseat');
+
+function syncHUD() {
+  const p = INSP.selP;
+  if (!p) { if (!ipanel.hidden) ipanel.hidden = true; ipAll.hidden = true; return; }
+  if (ipanel.hidden) { ipanel.hidden = false; ipanel.dataset.m = '0'; }
+  if (ipName.textContent !== p.nm) ipName.textContent = p.nm;
+  if (ipDesc.textContent !== p.ds) ipDesc.textContent = p.ds;
+  const out = isOut(p);
+  const tag = out ? 'Detached — drag the part, rotate it, or return it' : (INSP.insp ? 'Inspection focus' : 'Assembled — ready to remove');
+  if (ipTag.textContent !== tag) ipTag.textContent = tag;
+  const pt = out ? 'Return to position' : 'Remove component';
+  if (ipPull.textContent !== pt) ipPull.textContent = pt;
+  const it = INSP.insp ? 'Exit inspection' : 'Inspect closer';
+  if (ipInsp.textContent !== it) ipInsp.textContent = it;
+  const any = parts.some(isOut);
+  if (ipAll.hidden === any) ipAll.hidden = !any;
+}
+function selectP(p) {
+  if (!p) return;
+  if (INSP.selP === p) { syncHUD(); return; }
+  if (INSP.selP) returnP(INSP.selP);
+  INSP.selP = p;
+  syncHUD();
+}
+function returnP(p) {
+  if (!p) return;
+  p.pullT = 0; p.latT = 0; p.rotT = 0; p.tiltT = 0;
+  if (INSP.selP === p) syncHUD();
+}
+function deselect() {
+  if (INSP.selP) returnP(INSP.selP);
+  INSP.selP = null; INSP.insp = false;
+  if (ipl.classList.contains('on')) ipl.classList.remove('on');
+  syncHUD();
+}
+function reassemble() {
+  parts.forEach(p => { p.pullT = 0; p.latT = 0; p.rotT = 0; p.tiltT = 0; });
+  INSP.selP = null; INSP.dragP = null; INSP.drag = null; INSP.insp = false;
+  if (ipl.classList.contains('on')) ipl.classList.remove('on');
+  syncHUD();
+}
+function outset(p) { // begin a scripted extraction, reconciling with the global exploded view
+  p.pullT = Math.min(p.max, Math.max(.9, p.max * .55));
+  p.wasOut = true;
+  if (cam.E > .02 && st.mE == null) st.mE = 0;
+  syncHUD();
+}
+function togglePull(p) { if (isOut(p)) returnP(p); else outset(p); }
+
+function startPull(p, e) {
+  INSP.dragP = p;
+  p.pullT = Math.max(p.pullT, .32); // swift but eased initial release before full pointer control
+  INSP.drag = { x0: e.clientX, y0: e.clientY, pull0: p.pullT, lat0: p.latT, rot0: p.rotT, tilt0: p.tiltT, sh: !!e.shiftKey };
+  p.wasOut = true;
+  if (cam.E > .02 && st.mE == null) st.mE = 0;
+  const c = worldC(p, [0, 0, 0]), s0 = [0, 0, false], s1 = [0, 0, false];
+  if (projLast) {
+    projLast(c, SZERO, s0);
+    projLast([c[0] + p.ax[0] * .4, c[1] + p.ax[1] * .4, c[2] + p.ax[2] * .4], SZERO, s1);
+    const sx = s1[0] - s0[0], sy = s1[1] - s0[1], sl = Math.hypot(sx, sy);
+    if (sl < 1) { INSP.sd = [0, -1]; INSP.wpp = 240; }
+    else { INSP.sd = [sx / sl, sy / sl]; INSP.wpp = sl / .4; }
+    const vd = V([c[0] - projLast.eye[0], c[1] - projLast.eye[1], c[2] - projLast.eye[2]]);
+    let lw = [p.ax[1] * vd[2] - p.ax[2] * vd[1], p.ax[2] * vd[0] - p.ax[0] * vd[2], p.ax[0] * vd[1] - p.ax[1] * vd[0]];
+    lw = Math.hypot(lw[0], lw[1], lw[2]) > 1e-3 ? V(lw) : [1, 0, 0];
+    const s2 = [0, 0, false];
+    projLast([c[0] + lw[0] * .25, c[1] + lw[1] * .25, c[2] + lw[2] * .25], SZERO, s2);
+    const sgn = ((s2[0] - s0[0]) * -INSP.sd[1] + (s2[1] - s0[1]) * INSP.sd[0]) >= 0 ? 1 : -1;
+    p.ld[0] = lw[0] * sgn; p.ld[1] = lw[1] * sgn; p.ld[2] = lw[2] * sgn;
+  }
+  cv.style.cursor = 'grabbing';
+  syncHUD();
+}
+function movePull(p, e) {
+  const d = INSP.drag;
+  if (!d) return;
+  const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+  if (d.sh || e.shiftKey) { // rotate the part about its own axis
+    p.rotT = d.rot0 + dx * .012;
+    p.tiltT = clamp(d.tilt0 + dy * .009, -.9, .9);
+    return;
+  }
+  const along = (dx * INSP.sd[0] + dy * INSP.sd[1]) / INSP.wpp;
+  const perp = (dx * -INSP.sd[1] + dy * INSP.sd[0]) / INSP.wpp;
+  p.pullT = clamp(d.pull0 + along, 0, p.max);
+  p.latT = clamp(d.lat0 + perp, -1.1, 1.1);
+}
+function endPull(p, cancel) {
+  INSP.dragP = null; INSP.drag = null;
+  cv.style.cursor = '';
+  if (cancel || p.pull < .3) returnP(p); // released near the seat → magnetic snap back
+  syncHUD();
+}
+
+ipPull.addEventListener('click', () => { const p = INSP.selP; if (!p) return; if (isOut(p)) returnP(p); else outset(p); });
+ipInsp.addEventListener('click', () => { if (INSP.selP) { INSP.insp = !INSP.insp; syncHUD(); } });
+ipAll.addEventListener('click', reassemble);
+ipX.addEventListener('click', deselect);
+hsBtns.forEach(b => b.addEventListener('click', () => selectP(partById(HS[b.dataset.k][1]))));
+
+// --- pointer + keyboard wiring (camera orbit stays the default gesture) ---
+let drag = null, pend = null, downX = 0, downY = 0, downT = 0;
+cv.addEventListener('pointerdown', e => {
+  if (!R) return;
+  downX = e.clientX; downY = e.clientY; downT = performance.now();
+  try { cv.setPointerCapture(e.pointerId); } catch { /* pointer already gone or unknown id */ }
+  const p = pickPart(e.clientX, e.clientY);
+  if (p && p === INSP.selP) { startPull(p, e); pend = null; drag = null; return; }
+  pend = p ? { p, x: e.clientX, y: e.clientY, moved: 0 } : null;
+  drag = [e.clientX, e.clientY];
+});
+cv.addEventListener('pointermove', e => {
+  INSP.mx = e.clientX; INSP.my = e.clientY;
+  if (INSP.dragP) { movePull(INSP.dragP, e); return; }
+  if (pend) {
+    const md = Math.hypot(e.clientX - pend.x, e.clientY - pend.y);
+    if (md > pend.moved) pend.moved = md;
+  }
+  if (!drag) { if (e.pointerType !== 'touch') INSP.dirty = true; return; }
+  cam.ua -= (e.clientX - drag[0]) * .008;
+  cam.ue += (e.clientY - drag[1]) * .006;
+  drag = [e.clientX, e.clientY];
+});
+const endPtr = (e, cancel) => {
+  if (INSP.dragP) { endPull(INSP.dragP, cancel); pend = null; drag = null; return; }
+  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+  if (!cancel && moved < 7 && performance.now() - downT < 700) {
+    if (pend) selectP(pend.p);
+    else if (INSP.selP) deselect();
+  }
+  pend = null; drag = null;
+};
+cv.addEventListener('pointerup', e => endPtr(e, false));
+cv.addEventListener('pointercancel', e => endPtr(e, true));
+cv.addEventListener('pointerleave', () => {
+  if (drag || INSP.dragP) return;
+  INSP.hovP = null; INSP.dirty = false;
+  if (ipl.classList.contains('on')) ipl.classList.remove('on');
+});
+function esc() {
+  if (INSP.dragP) { endPull(INSP.dragP, true); return; }
+  const p = INSP.selP;
+  if (!p) return;
+  if (INSP.insp) { INSP.insp = false; syncHUD(); }
+  else if (isOut(p)) returnP(p);
+  else deselect();
+}
+cv.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.stopPropagation(); esc(); e.preventDefault(); return; }
+  const p = INSP.selP;
+  if (p && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    let hit = true;
+    switch (e.key) {
+      case 'ArrowUp': p.pullT = clamp(p.pullT + .3, 0, p.max); p.wasOut = true; break;
+      case 'ArrowDown': p.pullT = clamp(p.pullT - .3, 0, p.max); break;
+      case 'ArrowLeft': p.rotT -= .35; break;
+      case 'ArrowRight': p.rotT += .35; break;
+      case 'Enter': case ' ': togglePull(p); break;
+      case 'r': case 'R': returnP(p); break;
+      case 'i': case 'I': INSP.insp = !INSP.insp; break;
+      default: hit = false;
+    }
+    if (hit) { syncHUD(); e.preventDefault(); return; }
+  }
+  const k = { ArrowLeft: 'left', ArrowRight: 'right', '+': 'in', '=': 'in', '-': 'out', '0': 'reset' }[e.key];
+  if (k) { act[k](); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { cam.ue += .08; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { cam.ue -= .08; e.preventDefault(); }
+});
+addEventListener('keydown', e => { if (e.key === 'Escape') esc(); });
+// The exploded slider and Reassemble reconcile any manual extraction first
+exEl.addEventListener('input', () => { if (INSP.selP || parts.some(isOut)) reassemble(); });
+reEl.addEventListener('click', () => { if (INSP.selP || parts.some(isOut)) reassemble(); });
+
+// Seat flash + per-frame integration (runs inside the main loop, after the clock tick)
+const lead = { seatX: -1e9, seatY: -1e9, x: -1e9, y: -1e9, on: null };
+let iplW = 0, iplH = 0;
+function flashSeat(p) {
+  if (!projLast) return;
+  const s = [0, 0, false];
+  projLast([p.ct[0] + p.ex[0] * cam.E, p.ct[1] + p.ex[1] * cam.E, p.ct[2] + p.ex[2] * cam.E], SZERO, s);
+  if (!s[2]) return;
+  lseat.setAttribute('cx', s[0]); lseat.setAttribute('cy', s[1]);
+  lseat.classList.remove('pop');
+  void lseat.getBoundingClientRect();
+  lseat.classList.add('pop');
+}
+const ez = (v, t, k) => Math.abs(t - v) < .0015 ? t : v + (t - v) * k;
+function inspFrame(dt, k, now) {
+  let anyOut = false;
+  for (const p of parts) {
+    // Fast ease while actively dragged; a quicker magnetic settle over the last stretch home
+    const home = p.pullT === 0 && p.latT === 0 && p.rotT === 0 && p.tiltT === 0;
+    const kk = RM ? 1 : (INSP.dragP === p ? Math.min(1, k * 2.1) : home && p.pull < .35 ? Math.min(1, k * 2.6) : k);
+    p.pull = ez(p.pull, p.pullT, kk);
+    p.lat = ez(p.lat, p.latT, kk);
+    p.rot = ez(p.rot, p.rotT, kk);
+    p.tilt = ez(p.tilt, p.tiltT, kk);
+    const on = p.pull > .015 || Math.abs(p.lat) > .015 || Math.abs(p.rot) > .004 || Math.abs(p.tilt) > .004;
+    p.mmOn = on;
+    if (on) {
+      p.off[0] = p.ax[0] * p.pull + p.ld[0] * p.lat;
+      p.off[1] = p.ax[1] * p.pull + p.ld[1] * p.lat;
+      p.off[2] = p.ax[2] * p.pull + p.ld[2] * p.lat;
+      composeMan(p); // identity rotation for a pure pull, spin/tilt when dragged
+    } else if (p.off[0] || p.off[1] || p.off[2]) { p.off[0] = p.off[1] = p.off[2] = 0; }
+    if (p.wasOut && p.pullT === 0 && p.latT === 0 && p.pull < .03 && Math.abs(p.lat) < .03) {
+      p.wasOut = false;
+      if (!RM) flashSeat(p);   // magnetic-snap confirmation at the seat
+      if (INSP.selP === p) syncHUD();
+    }
+    if (p.pull > .05 || Math.abs(p.lat) > .05 || INSP.dragP === p) anyOut = true;
+  }
+  // Freeze the section camera while a component is out; release when it is home again
+  if (anyOut && !INSP.hold) INSP.hold = { ...PRE[st.cur], E: 0, a: cam.a, e: cam.e, y: cam.y, d: cam.d, sx: cam.sx };
+  if (!anyOut && INSP.hold && INSP.fw < .03) INSP.hold = null;
+  // Section jump: reconcile predictably — every component returns, the timeline resumes
+  if (INSP.sec !== st.cur) {
+    INSP.sec = st.cur;
+    if (INSP.selP || anyOut) reassemble();
+  }
+  // Inspection focus target follows the pulled component
+  const sp = INSP.selP;
+  if (sp && (sp.pull > .1 || INSP.dragP === sp)) { worldC(sp, INSP.focus); INSP.fwT = INSP.insp ? .95 : .6; }
+  else INSP.fwT = 0;
+  INSP.fw = RM ? INSP.fwT : ez(INSP.fw, INSP.fwT, Math.min(1, k * .9));
+  for (const p of parts) p.ho = p === INSP.selP ? .85 : p === INSP.hovP ? .42 : 0;
+  // Hover picking (throttled to one pick per frame, pointer-move driven)
+  if (INSP.dirty && !INSP.dragP) {
+    INSP.dirty = false;
+    const hp = pickPart(INSP.mx, INSP.my);
+    if (hp !== INSP.hovP) {
+      INSP.hovP = hp;
+      cv.style.cursor = hp ? 'pointer' : '';
+      if (hp) {
+        ipl.textContent = hp.nm + (isOut(hp) ? ' · detached' : '');
+        ipl.classList.add('on');
+        iplW = ipl.offsetWidth; iplH = ipl.offsetHeight;
+      } else ipl.classList.remove('on');
+    }
+  }
+  if (ipl.classList.contains('on') && !INSP.dragP) {
+    const lx = clamp(INSP.mx + 16, 8, innerWidth - iplW - 12);
+    const ly = clamp(INSP.my + 18, 8, innerHeight - iplH - 12);
+    ipl.style.transform = `translate(${lx}px,${ly}px)`;
+  }
+  // Leader line from the pulled component back to its seat
+  const lp = sp && (sp.pull > .12 || Math.abs(sp.lat) > .12);
+  if (lp && projLast) {
+    const s0 = [0, 0, false], s1 = [0, 0, false];
+    projLast([sp.ct[0] + sp.ex[0] * cam.E, sp.ct[1] + sp.ex[1] * cam.E, sp.ct[2] + sp.ex[2] * cam.E], SZERO, s0);
+    worldC(sp, INSP.focus);
+    projLast(INSP.focus, SZERO, s1);
+    if (s0[2] && s1[2]) {
+      if (lead.on !== true) { leader.classList.add('on'); lead.on = true; }
+      if (Math.abs(s0[0] - lead.seatX) > .4 || Math.abs(s0[1] - lead.seatY) > .4 || Math.abs(s1[0] - lead.x) > .4 || Math.abs(s1[1] - lead.y) > .4) {
+        lead.seatX = s0[0]; lead.seatY = s0[1]; lead.x = s1[0]; lead.y = s1[1];
+        lline.setAttribute('x1', s0[0]); lline.setAttribute('y1', s0[1]);
+        lline.setAttribute('x2', s1[0]); lline.setAttribute('y2', s1[1]);
+        ldot.setAttribute('cx', s1[0]); ldot.setAttribute('cy', s1[1]);
+      }
+    }
+  } else if (lead.on) { leader.classList.remove('on'); lead.on = false; }
+}
+
