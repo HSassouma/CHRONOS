@@ -1,0 +1,129 @@
+/* CHRONOS ONE — Premium Futuristic Design System
+   Editorial luxury · cosmic depth · chrome restraint
+   Fonts are bundled locally (fonts/*.woff2), so no runtime dependency on a font CDN. */
+
+/* ---------- Bundled fonts ---------- */
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../fonts/cormorant-garamond-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../fonts/cormorant-garamond-latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../fonts/space-grotesk-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/space-mono-latin-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/space-mono-latin-700.woff2') format('woff2');
+}
+
+/* ---------- Design Tokens ---------- */
+:root {
+  /* Cosmic palette */
+  --deep-space: #020409;
+  --midnight-blue: #07091A;
+  --cosmic-violet: #6C5CE7;
+  --electric-lavender: #9B8FFF;
+  --ice-silver: #DDE3F0;
+  --chrome-highlight: #F5F7FF;
+  --cool-cyan: #00D4FF;
+
+  /* Watch materials (preserved — also used by the SVG fallback face) */
+  --bas: #23272B;
+  --anth: #3B4147;
+  --steel: #AEB5BB;
+  --bone: #E8E4DA;
+  --bronze: #A4733C;
+
+  /* Ink (text colors) */
+  --ink-bright: #F2F5FC;
+  --ink: #C9D1E4;
+  --ink-dim: #939CB4;
+  --ink-faint: #6E7791;
+
+  /* Surfaces */
+  --surface: rgba(11, 14, 33, 0.74);
+  --surface-solid: rgba(5, 7, 17, 0.92);
+  --hairline: rgba(221, 227, 240, 0.12);
+  --hairline-strong: rgba(221, 227, 240, 0.24);
+
+  /* Gradients */
+  --bg-grad:
+    radial-gradient(90% 70% at 8% 96%, rgba(52, 40, 128, 0.25) 0%, transparent 60%),
+    radial-gradient(130% 100% at 80% 6%, #161c42 0%, #0b102a 32%, var(--midnight-blue) 55%, var(--deep-space) 82%);
+  --chrome-grad: linear-gradient(178deg, #FDFEFF 0%, #E9EEFB 24%, #B9C4DD 42%, #8E9AB8 47%, #E3E9F8 52%, #C6CFE4 66%, #93A0BE 100%);
+  --violet-glow: radial-gradient(ellipse at center, rgba(108, 92, 231, 0.16) 0%, transparent 68%);
+  --panel-grad: linear-gradient(180deg, rgba(12, 16, 38, 0.78) 0%, rgba(4, 6, 16, 0.9) 100%);
+
+  /* Typography families */
+  --font-display: 'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+
+  /* Typography scale (fluid, clamp) */
+  --text-xs: clamp(0.72rem, 0.68rem + 0.18vw, 0.8rem);
+  --text-sm: clamp(0.85rem, 0.8rem + 0.22vw, 0.95rem);
+  --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.06rem);
+  --text-lg: clamp(1.06rem, 1rem + 0.4vw, 1.22rem);
+  --text-xl: clamp(1.4rem, 1.15rem + 1.1vw, 2rem);
+  --text-2xl: clamp(1.9rem, 1.4rem + 1.8vw, 2.6rem);
+  --text-3xl: clamp(2.1rem, 1.3rem + 2.6vw, 3.4rem);
+  --text-hero: clamp(2.75rem, 1.6rem + 6vw, 6.75rem);
+
+  /* Spacing scale */
+  --space-1: clamp(0.25rem, 0.2rem + 0.25vw, 0.5rem);
+  --space-2: clamp(0.5rem, 0.4rem + 0.5vw, 1rem);
+  --space-3: clamp(0.75rem, 0.6rem + 0.75vw, 1.5rem);
+  --space-4: clamp(1rem, 0.8rem + 1vw, 2rem);
+  --space-5: clamp(1.5rem, 1.2rem + 1.5vw, 3rem);
+  --space-6: clamp(2rem, 1.5rem + 2.5vw, 4rem);
+  --space-8: clamp(3rem, 2rem + 4vw, 6rem);
+  --space-10: clamp(4rem, 3rem + 5vw, 8rem);
+
+  /* Layout */
+  --panel-max: 32rem;
+  --page-padding: clamp(1.25rem, 4vw, 6rem);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 0.16s;
+  --duration-normal: 0.32s;
+  --duration-slow: 0.6s;
+  --duration-entrance: 0.8s;
+
+  /* Shadows & glows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --glow-violet: 0 0 18px rgba(108, 92, 231, 0.28);
+  --glow-bronze: 0 0 15px rgba(164, 115, 60, 0.4);
+
+  /* Studio contact shadow under the watch; `--shx` tracks the camera shift (JS) */
+  --shx: 50%;
+
+  color-scheme: dark;
+}
+
