@@ -643,3 +643,315 @@ const HS = {
 
 const tris = parts.reduce((s, p) => s + p.ms.reduce((t, m) => t + m.g.i.length / 3, 0), 0);
 
+// ---------- WebGL2 Shaders & Physically Based Pipeline ----------
+const VS = `#version 300 es
+layout(location=0) in vec3 aP;
+layout(location=1) in vec3 aN;
+uniform mat4 uVP, uM;
+out vec3 vN, vW, vL;
+
+void main() {
+  vec4 w = uM * vec4(aP, 1.0);
+  vW = w.xyz;
+  vL = aP;
+  vN = mat3(uM) * aN;
+  gl_Position = uVP * w;
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec3 vN, vW, vL;
+out vec4 o;
+
+uniform vec3 uE, uC, uT, uK;
+uniform vec2 uI;
+uniform float uS, uHl;
+
+// Studio environment map: key softbox, warm champagne fill, violet kicker, and horizon line
+vec3 studioEnv(vec3 d, float ro) {
+  float t = d.y * 0.5 + 0.5;
+  vec3 envBase = mix(vec3(0.012, 0.015, 0.024), vec3(0.14, 0.16, 0.22), smoothstep(0.1, 0.9, t));
+  
+  float horizon = exp(-abs(d.y) * 4.2);
+  envBase += vec3(0.18, 0.20, 0.26) * horizon * (1.0 - ro * 0.6);
+
+  vec3 keyDir = normalize(vec3(-0.62, 0.78, 0.45));
+  float dKey = max(dot(d, keyDir), 0.0);
+  float spotKey = pow(dKey, mix(80.0, 4.0, ro));
+  vec3 keyLight = vec3(2.2, 2.1, 1.95) * spotKey;
+
+  vec3 fillDir = normalize(vec3(0.65, 0.35, 0.68));
+  float dFill = max(dot(d, fillDir), 0.0);
+  float spotFill = pow(dFill, mix(56.0, 3.5, ro));
+  vec3 fillLight = vec3(1.3, 1.05, 0.75) * spotFill;
+
+  vec3 vioDir = normalize(vec3(0.72, 0.32, -0.68));
+  float dVio = max(dot(d, vioDir), 0.0);
+  float spotVio = pow(dVio, mix(64.0, 4.5, ro));
+  vec3 vioLight = vec3(0.85, 0.75, 1.45) * spotVio;
+
+  vec3 cyanDir = normalize(vec3(-0.45, -0.55, -0.70));
+  float dCyan = max(dot(d, cyanDir), 0.0);
+  float spotCyan = pow(dCyan, mix(48.0, 3.0, ro));
+  vec3 cyanLight = vec3(0.16, 0.58, 0.80) * spotCyan;
+
+  return envBase + keyLight + fillLight + vioLight + cyanLight;
+}
+
+// Narkowicz ACES Filmic Tone Mapping curve
+vec3 acesFilmic(vec3 x) {
+  float a = 2.51;
+  float b = 0.03;
+  float c = 2.43;
+  float d = 0.59;
+  float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+void main() {
+  vec3 n = normalize(vN);
+  vec3 v = normalize(uE - vW);
+  if (dot(n, v) < 0.0) n = -n;
+  vec3 r = reflect(-v, n);
+  float nv = max(dot(n, v), 0.001);
+  float inv = 1.0 - nv;
+
+  float me = uK.x, ro = uK.y, al = uK.z;
+  vec3 base = uC;
+  float rimMul = 1.0;
+
+  // Sapphire Crystal Glass Handling (Alpha Pass)
+  if (al < 0.95) {
+    float fGlass = pow(inv, 3.5);
+    vec3 arCoat = mix(vec3(0.40, 0.18, 0.88), vec3(0.08, 0.65, 0.95), nv);
+    vec3 gRef = studioEnv(r, 0.02) * (fGlass * 0.75 + 0.025) + arCoat * (fGlass * 0.40 + 0.012);
+    
+    vec3 keyDir = normalize(vec3(-0.62, 0.78, 0.45));
+    vec3 hKey = normalize(keyDir + v);
+    float glint = pow(max(dot(n, hKey), 0.0), 128.0) * 2.2;
+    gRef += vec3(1.8, 1.7, 1.6) * glint;
+    gRef += vec3(0.52, 0.36, 1.25) * (fGlass * 0.9 + 0.05) * uHl; // interaction highlight
+
+    float glassAlpha = clamp(0.04 + fGlass * 0.55 + glint * 0.35 + uHl * 0.22, 0.0, 0.96);
+    vec3 toneCol = acesFilmic(gRef);
+    o = vec4(pow(toneCol, vec3(1.0 / 2.2)), glassAlpha);
+    return;
+  }
+
+  // Anisotropic Radial Sunburst (dial only) — flagged per material with uS.
+  // All other flat surfaces with uI.y just get fine brushed grain.
+  if (uS > 0.5 && abs(n.y) > 0.65 && length(vL.xz) > 0.08) {
+    vec3 tangent = normalize(vec3(-vL.z, 0.0, vL.x));
+    float anisoDot = abs(dot(r, tangent));
+    float anisoSpec = pow(1.0 - anisoDot, 12.0) * uI.y;
+
+    float theta = atan(vL.z, vL.x);
+    float micro = sin(theta * 240.0) * 0.04;
+    ro = clamp(ro - anisoSpec * 0.10 + micro, 0.04, 0.95);
+
+    float radius = length(vL.xz);
+    vec3 dialNavy = mix(vec3(0.016, 0.050, 0.20), vec3(0.003, 0.011, 0.055), smoothstep(0.20, 1.70, radius));
+    base = dialNavy + vec3(0.06, 0.17, 0.55) * anisoSpec * 1.35;
+    rimMul = 0.55;
+  } else if (uI.y > 0.01) {
+    float sp = fract(sin(dot(vW.xz, vec2(12.9898, 78.233))) * 43758.5453);
+    ro = clamp(ro + (sp - 0.5) * uI.y * 0.18, 0.04, 0.95);
+  }
+
+  // Angle-Dependent Iridescence & Titanium Sheen
+  if (uI.x > 0.01 && me > 0.5) {
+    float fres = pow(inv, 2.5);
+    base = mix(base, uT, fres * uI.x);
+  }
+
+  // Ambient Occlusion & Cavity Depth
+  float ao = clamp((vW.y + 0.60) * 1.45, 0.35, 1.0);
+  if (n.y < -0.1) ao *= 0.68;
+
+  // Physical Fresnel F0 (Metal vs Dielectric)
+  vec3 F0 = mix(vec3(0.04), base, me);
+  if (me < 0.3 && uC.r > 0.5 && uC.g < 0.1) F0 = vec3(0.08); // Synthetic ruby
+
+  float f5 = pow(inv, 5.0);
+  vec3 F = F0 + (1.0 - F0) * f5 * (1.0 - ro * 0.70);
+
+  // Environment Reflection (Split-sum IBL approximation)
+  vec3 specEnv = studioEnv(r, ro) * F;
+
+  // Direct Key & Fill Lights (Cook-Torrance GGX approximation)
+  vec3 LKey = normalize(vec3(-0.62, 0.78, 0.45));
+  float dKey = max(dot(n, LKey), 0.0);
+  vec3 LFill = normalize(vec3(0.65, 0.35, 0.68));
+  float dFill = max(dot(n, LFill), 0.0);
+
+  vec3 diffuse = base * (1.0 - me) * (studioEnv(n, 1.0) * 0.35 + dKey * vec3(1.3, 1.22, 1.1) * 0.75 + dFill * vec3(0.9, 0.8, 0.6) * 0.45) * ao;
+
+  // Direct Specular Highlight (GGX)
+  vec3 hKey = normalize(LKey + v);
+  float nhKey = max(dot(n, hKey), 0.0);
+  float aRough = max(ro * ro, 0.002);
+  float a2 = aRough * aRough;
+  float denom = nhKey * nhKey * (a2 - 1.0) + 1.0;
+  float D = a2 / (3.14159265 * denom * denom + 1e-5);
+  
+  float specTerm = D * 0.25 * (1.0 - ro * 0.5);
+  vec3 specCol = mix(vec3(1.0), base, me) * specTerm * vec3(2.2, 2.1, 1.95) * dKey;
+
+  // Rim Silhouette Lighting (defines the polished chamfers)
+  vec3 rimVioDir = normalize(vec3(0.72, 0.32, -0.68));
+  float rimVio = pow(inv, 3.2) * max(dot(n, rimVioDir), 0.0) * 0.9;
+  vec3 rimCyanDir = normalize(vec3(-0.45, -0.55, -0.70));
+  float rimCyan = pow(inv, 3.2) * max(dot(n, rimCyanDir), 0.0) * 0.55;
+  vec3 rimLight = vec3(0.60, 0.44, 1.00) * rimVio + vec3(0.16, 0.48, 0.68) * rimCyan;
+
+  vec3 col = diffuse + specEnv + specCol + rimLight * (1.0 - ro * 0.62) * rimMul;
+
+  // Component interaction highlight: violet rim + faint fill, restrained so materials stay readable
+  col += (vec3(0.62, 0.46, 1.15) * pow(inv, 2.3) * 1.05 + vec3(0.10, 0.065, 0.24)) * uHl;
+
+  // Luminous Super-LumiNova Self-Illumination
+  if (me < 0.1 && uI.x > 0.8) {
+    col += uC * 1.42;
+  }
+
+  vec3 mapped = acesFilmic(col);
+  o = vec4(pow(mapped, vec3(1.0 / 2.2)), al);
+}`;
+
+function initGL() {
+  const cv = $('#gl'), gl = cv.getContext('webgl2', { antialias: true, alpha: true, premultipliedAlpha: false });
+  if (!gl) throw Error('WebGL2 unavailable');
+  const sh = (t, s) => {
+    const o = gl.createShader(t);
+    gl.shaderSource(o, s);
+    gl.compileShader(o);
+    if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(o));
+    return o;
+  };
+  const pr = gl.createProgram();
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS));
+  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(pr));
+  gl.useProgram(pr);
+
+  const U = n => gl.getUniformLocation(pr, n);
+  const uVP = U('uVP'), uM = U('uM'), uE = U('uE'), uC = U('uC'), uK = U('uK'), uT = U('uT'), uI = U('uI'), uS = U('uS'), uHl = U('uHl');
+
+  parts.forEach(p => p.ms.forEach(m => {
+    m.vao = gl.createVertexArray();
+    gl.bindVertexArray(m.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    const n = m.g.p.length / 3, d = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      d.set(m.g.p.slice(i * 3, i * 3 + 3), i * 6);
+      d.set(m.g.n.slice(i * 3, i * 3 + 3), i * 6 + 3);
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(m.g.i), gl.STATIC_DRAW);
+    m.n = m.g.i.length;
+  }));
+
+  gl.enable(gl.DEPTH_TEST);
+  cv.addEventListener('webglcontextlost', e => { e.preventDefault(); fallback(); });
+
+  const P = getMat(), VP0 = getMat(), VP = getMat(), ex = getMat(), mvp0 = getMat(), mvp = getMat(), mt0 = getMat();
+  const EYE = [0, 0, 0], TGT = [0, 0, 0];
+
+  return {
+    render() {
+      const w = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(devicePixelRatio || 1, 2);
+      if (cv.width !== (w * dpr | 0) || cv.height !== (h * dpr | 0)) {
+        cv.width = w * dpr | 0; cv.height = h * dpr | 0;
+      }
+      gl.viewport(0, 0, cv.width, cv.height);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      const asp = w / h, port = asp < .9;
+      // Inspection focus: while a component is out, orbit around it and pull back slightly
+      const fw = INSP.fw, fx = INSP.focus;
+      const d = cam.d * cam.uz * (port ? 1.5 : 1) * (1 + .2 * fw);
+      const az = cam.a + cam.ua;
+      const el = clamp(cam.e + cam.ue, .05, 1.45);
+      const ty = cam.y + (fx[1] - cam.y) * fw;
+
+      EYE[0] = fx[0] * fw + d * Math.cos(el) * Math.sin(az);
+      EYE[1] = ty + d * Math.sin(el);
+      EYE[2] = fx[2] * fw + d * Math.cos(el) * Math.cos(az);
+      TGT[0] = fx[0] * fw; TGT[1] = ty; TGT[2] = fx[2] * fw;
+
+      persp(.52, asp, .5, 80, P);
+      P[8] = STAGE.sheet ? 0 : -cam.sx;
+      P[9] = STAGE.sheet ? stageY : 0;
+      look(EYE, TGT, VP0);
+      mul(P, VP0, VP);
+
+      gl.uniformMatrix4fv(uVP, false, VP);
+      gl.uniform3fv(uE, EYE);
+
+      // Two-pass rendering: Pass 0 (Opaque & Metals), Pass 1 (Transparent Glass)
+      [0, 1].forEach(pass => {
+        if (pass) {
+          gl.enable(gl.BLEND);
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+          gl.depthMask(false);
+        }
+        parts.forEach(p => {
+          // World = explode translate · manual pose (p.mm carries pull/lat/rotation about the centroid)
+          T(p.ex[0] * cam.E, p.ex[1] * cam.E, p.ex[2] * cam.E, ex);
+          const exm = p.mmOn ? mul(ex, p.mm, mt0) : ex;
+          const hl = p.ho;
+          p.ms.forEach(m => {
+            if ((m.a < 1) !== !!pass) return;
+            const rot = m.f ? m.f() : I;
+            mul(m.M, rot, mvp0);
+            if (rot !== I) releaseMat(rot);
+            mul(exm, mvp0, mvp);
+            gl.uniformMatrix4fv(uM, false, mvp);
+            gl.uniform3fv(uC, m.c);
+            gl.uniform3fv(uT, m.t);
+            gl.uniform2f(uI, m.i, m.g2);
+            gl.uniform3f(uK, m.m, m.r, m.a);
+            gl.uniform1f(uS, m.sb);
+            gl.uniform1f(uHl, hl);
+            gl.bindVertexArray(m.vao);
+            gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0);
+          });
+        });
+      });
+      gl.disable(gl.BLEND);
+      gl.depthMask(true);
+
+      const f = (v, exA, out) => {
+        let x, y, z;
+        if (exA && exA.ex) { // part mode: manual pose + explode offset, so chips track pulled parts
+          const p = exA;
+          if (p.mmOn) {
+            const m = p.mm;
+            x = m[0] * v[0] + m[4] * v[1] + m[8] * v[2] + m[12];
+            y = m[1] * v[0] + m[5] * v[1] + m[9] * v[2] + m[13];
+            z = m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14];
+          } else { x = v[0]; y = v[1]; z = v[2]; }
+          x += p.ex[0] * cam.E; y += p.ex[1] * cam.E; z += p.ex[2] * cam.E;
+        } else {
+          x = v[0] + exA[0] * cam.E; y = v[1] + exA[1] * cam.E; z = v[2] + exA[2] * cam.E;
+        }
+        const a = VP[0] * x + VP[4] * y + VP[8] * z + VP[12];
+        const b = VP[1] * x + VP[5] * y + VP[9] * z + VP[13];
+        const c = VP[3] * x + VP[7] * y + VP[11] * z + VP[15];
+        out[0] = (a / c * .5 + .5) * w;
+        out[1] = (1 - (b / c * .5 + .5)) * h;
+        out[2] = c > 0;
+        return out;
+      };
+      f.vp = VP; f.w = w; f.h = h; f.eye = EYE;
+      return f;
+    }
+  };
+}
