@@ -139,3 +139,25 @@
   <label class="scrub">Scrub simulated time <input id="scrub" type="range" min="-720" max="720" value="0" step="1" aria-valuetext="Live time"></label>
   <p><button class="btn" id="live" aria-pressed="true">Return to live time</button></p>
 </div></section>
+
+<section id="inside" data-visible="false"><div class="panel">
+  <p class="eyebrow">02 — Anatomy</p>
+  <h2>Turn it over.</h2>
+  <p>Interact with the 3D model directly. Rotate with your mouse or controls to inspect the hand-beveled anglage, radial sunburst dial, and open-heart balance architecture.</p>
+  <div class="row" role="group" aria-label="View controls">
+    <button class="btn" data-act="left" aria-label="Rotate left">◀</button><button class="btn" data-act="right" aria-label="Rotate right">▶</button>
+    <button class="btn" data-act="in" aria-label="Zoom in">+</button><button class="btn" data-act="out" aria-label="Zoom out">−</button>
+    <button class="btn" data-act="reset">Reset view</button>
+  </div>
+  <p id="hs-info" aria-live="polite">Concept details appear here.</p>
+</div></section>
+
+<section id="explode" class="r" data-visible="false"><div class="panel">
+  <p class="eyebrow">03 — Exploded view</p>
+  <h2>Nine parts. One second.</h2>
+  <p>Each component is modeled as an independent piece of haute horlogerie geometry. Slide to separate the architectural assembly and reveal the movement within.</p>
+  <label class="scrub">Separation <input id="ex" type="range" min="0" max="100" value="100" aria-label="Separation of parts"></label>
+  <p><button class="btn" id="re">Reassemble</button></p>
+  <p id="ex-note" hidden>The exploded view needs WebGL, which is unavailable here.</p>
+  <ol class="parts" aria-label="Parts, top to bottom"><li>Crystal</li><li>Bezel</li><li>Hands</li><li>Dial</li><li>Movement</li><li>Case</li><li>Strap</li><li>Case back</li><li>Crown, to the side</li></ol>
+</div></section>
