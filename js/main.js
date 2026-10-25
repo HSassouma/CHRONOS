@@ -186,3 +186,265 @@ function beveledBox(w, h, d, bevel = 0.016) {
   return g;
 }
 
+// Architectural Beveled Horn Lugs with precision 45° chamfers
+function sculptedLug(xCenter, zDir) {
+  const g = { p: [], n: [], i: [] };
+  const add = (x, y, z, nx, ny, nz) => {
+    const l = Math.hypot(nx, ny, nz) || 1;
+    g.p.push(x, y, z); g.n.push(nx / l, ny / l, nz / l);
+    return g.p.length / 3 - 1;
+  };
+  const isRight = xCenter > 0, sX = isRight ? 1 : -1;
+  const z0 = 1.64 * zDir, z1 = 2.62 * zDir;
+  const y0 = 0.18, y1 = -0.20;
+  const wIn0 = 0.60, wOut0 = 1.08;
+  const wIn1 = 0.52, wOut1 = 0.88;
+  const thick0 = 0.38, thick1 = 0.24;
+
+  const r_TI = add(sX * wIn0, y0 + thick0 * 0.5, z0, 0, 1, 0);
+  const r_TC = add(sX * (wOut0 - 0.09), y0 + thick0 * 0.5, z0, 0, 1, 0);
+  const r_CO = add(sX * wOut0, y0 + thick0 * 0.5 - 0.08, z0, sX * 0.707, 0.707, 0);
+  const r_BO = add(sX * wOut0, y0 - thick0 * 0.5, z0, sX, 0, 0);
+  const r_BI = add(sX * wIn0, y0 - thick0 * 0.5, z0, -sX, 0, 0);
+
+  const t_TI = add(sX * wIn1, y1 + thick1 * 0.5, z1, 0, 1, 0);
+  const t_TC = add(sX * (wOut1 - 0.08), y1 + thick1 * 0.5, z1, 0, 1, 0);
+  const t_CO = add(sX * wOut1, y1 + thick1 * 0.5 - 0.07, z1, sX * 0.707, 0.707, 0);
+  const t_BO = add(sX * wOut1, y1 - thick1 * 0.5, z1, sX, 0, 0);
+  const t_BI = add(sX * wIn1, y1 - thick1 * 0.5, z1, -sX, 0, 0);
+
+  const addQuad = (p0, p1, p2, p3) => {
+    if ((zDir > 0) !== isRight) g.i.push(p0, p2, p1, p1, p2, p3);
+    else g.i.push(p0, p1, p2, p1, p3, p2);
+  };
+
+  addQuad(r_TI, r_TC, t_TC, t_TI);
+  addQuad(r_TC, r_CO, t_CO, t_TC);
+  addQuad(r_CO, r_BO, t_BO, t_CO);
+  addQuad(r_BI, r_TI, t_TI, t_BI);
+  addQuad(r_BO, r_BI, t_BI, t_BO);
+
+  const tip_c0 = add(sX * (wIn1 + wOut1) * 0.5, y1, z1, 0, 0, zDir);
+  const addTipTri = (p0, p1) => {
+    if ((zDir > 0) !== isRight) g.i.push(tip_c0, p0, p1);
+    else g.i.push(tip_c0, p1, p0);
+  };
+  addTipTri(t_TI, t_TC);
+  addTipTri(t_TC, t_CO);
+  addTipTri(t_CO, t_BO);
+  addTipTri(t_BO, t_BI);
+  addTipTri(t_BI, t_TI);
+
+  return g;
+}
+
+// Integrated Articulated Metal Bracelet with Flush Solid End-Links
+function buildBracelet(isTop) {
+  const outerLinks = [], centerLinks = [];
+  const zDir = isTop ? -1 : 1;
+  const NUM_ROWS = 6;
+
+  // Solid End-Link flush between the lugs
+  const endLink = beveledBox(0.58, 0.16, 0.18, 0.016);
+  bake(endLink, T(0, 0.06, 1.82 * zDir));
+  outerLinks.push(endLink);
+  
+  for (let i = 0; i < NUM_ROWS; i++) {
+    const t = (i + 0.5) / NUM_ROWS;
+    const zBase = (2.05 + i * 0.44) * zDir;
+    const yBase = -0.04 - 0.78 * Math.pow(t, 1.6);
+    const totalW = 1.05 - 0.20 * t;
+    const centerW = totalW * 0.38;
+    const outerW = (totalW - centerW - 0.02) * 0.5;
+    const linkLen = 0.19, linkThick = 0.052 - 0.008 * t;
+    
+    const dy = -0.78 * 1.6 * Math.pow(t, 0.6) / NUM_ROWS;
+    const dz = 0.44 * zDir;
+    const rotX = Math.atan2(-dy, Math.abs(dz)) * zDir;
+    const mat = mul(T(0, yBase, zBase), RX(rotX));
+    
+    // Outer Left Link
+    const outL = beveledBox(outerW * 0.5, linkThick, linkLen, 0.014);
+    shift(outL, -(centerW * 0.5 + outerW * 0.5 + 0.01), 0, 0);
+    bake(outL, mat);
+    outerLinks.push(outL);
+    
+    // Outer Right Link
+    const outR = beveledBox(outerW * 0.5, linkThick, linkLen, 0.014);
+    shift(outR, (centerW * 0.5 + outerW * 0.5 + 0.01), 0, 0);
+    bake(outR, mat);
+    outerLinks.push(outR);
+    
+    // Center Polished Link
+    if (i < NUM_ROWS - 1) {
+      const zNext = (2.05 + (i + 0.5) * 0.44) * zDir;
+      const yNext = -0.04 - 0.78 * Math.pow((i + 1) / NUM_ROWS, 1.6);
+      const matC = mul(T(0, yNext, zNext), RX(rotX));
+      const cLink = beveledBox(centerW * 0.48, linkThick * 1.08, linkLen * 1.05, 0.015);
+      bake(cLink, matC);
+      centerLinks.push(cLink);
+    }
+  }
+  return { outer: merge(outerLinks), center: merge(centerLinks) };
+}
+
+// Precision applied faceted hour markers
+function appliedIndicesGeo() {
+  const indices = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6, isMajor = i % 3 === 0, is12 = i === 0, r = 1.48;
+    if (is12) {
+      [-0.048, 0.048].forEach(offset => {
+        const marker = extrude([[-0.026, -0.10], [0.026, -0.10], [0.030, 0.10], [-0.030, 0.10]], 0.052);
+        bake(marker, mul(T(Math.sin(a) * r + Math.cos(a) * offset, 0.21, -Math.cos(a) * r + Math.sin(a) * offset), RY(-a)));
+        indices.push(marker);
+      });
+    } else if (i === 3) {
+      const marker = extrude([[-0.028, -0.05], [0.028, -0.05], [0.030, 0.05], [-0.030, 0.05]], 0.048);
+      bake(marker, mul(T(Math.sin(a) * (r + 0.03), 0.21, -Math.cos(a) * (r + 0.03)), RY(-a)));
+      indices.push(marker);
+    } else {
+      const w = isMajor ? 0.036 : 0.026, l = isMajor ? 0.102 : 0.080, h = isMajor ? 0.050 : 0.042;
+      const marker = extrude([[-w, -l], [w, -l], [w * 1.12, l], [-w * 1.12, l]], h);
+      bake(marker, mul(T(Math.sin(a) * r, 0.21, -Math.cos(a) * r), RY(-a)));
+      indices.push(marker);
+    }
+  }
+  return merge(indices);
+}
+
+function appliedLumeGeo() {
+  const lumes = [];
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6, is12 = i === 0, r = 1.48;
+    if (is12) {
+      [-0.048, 0.048].forEach(offset => {
+        const lume = extrude(rect(0.012, 0.075), 0.018);
+        bake(lume, mul(T(Math.sin(a) * r + Math.cos(a) * offset, 0.245, -Math.cos(a) * r + Math.sin(a) * offset), RY(-a)));
+        lumes.push(lume);
+      });
+    } else if (i === 3) {
+      const lume = extrude(rect(0.012, 0.032), 0.018);
+      bake(lume, mul(T(Math.sin(a) * (r + 0.03), 0.24, -Math.cos(a) * (r + 0.03)), RY(-a)));
+      lumes.push(lume);
+    } else {
+      const isMajor = i % 3 === 0;
+      const lume = extrude(rect(isMajor ? 0.016 : 0.011, isMajor ? 0.070 : 0.054), 0.018);
+      bake(lume, mul(T(Math.sin(a) * r, 0.24, -Math.cos(a) * r), RY(-a)));
+      lumes.push(lume);
+    }
+  }
+  return merge(lumes);
+}
+
+// Date Complication at 3 o'clock — two 7-segment studs reading "28"
+function dateDigitGeo(cx, cy, segs) {
+  const parts = [], w = 0.052, h = 0.086, t = 0.012;
+  const seg = (x, y, sw, sh) => {
+    const g = extrude(rect(sw, sh), 0.012);
+    shift(g, x, 0.016, y);
+    parts.push(g);
+  };
+  if (segs.includes('a')) seg(cx, h / 2, w, t);
+  if (segs.includes('g')) seg(cx, 0, w, t);
+  if (segs.includes('d')) seg(cx, -h / 2, w, t);
+  if (segs.includes('f')) seg(cx - w / 2, h / 4, t, h / 2 - t);
+  if (segs.includes('b')) seg(cx + w / 2, h / 4, t, h / 2 - t);
+  if (segs.includes('e')) seg(cx - w / 2, -h / 4, t, h / 2 - t);
+  if (segs.includes('c')) seg(cx + w / 2, -h / 4, t, h / 2 - t);
+  return merge(parts);
+}
+
+function dateWindowGeo() {
+  const frame = extrude([[-0.14, -0.11], [0.14, -0.11], [0.14, 0.11], [-0.14, 0.11]], 0.035);
+  const disc = extrude(rect(0.11, 0.08), 0.01);
+  shift(disc, 0, 0.012, 0);
+  const num2 = dateDigitGeo(-0.042, 0, 'abdeg');
+  const num8 = dateDigitGeo(0.042, 0, 'abcdefg');
+
+  const mPos = T(1.18, 0.21, 0);
+  bake(frame, mPos);
+  bake(disc, mPos);
+  bake(num2, mPos);
+  bake(num8, mPos);
+  return { frame, disc, numerals: merge([num2, num8]) };
+}
+
+// Open-Heart Escapement Exhibition Aperture Frame (stepped ring, no bridge bar)
+function openHeartFrameGeo() {
+  const outer = lathe([[.34, .198], [.44, .198], [.44, .228], [.34, .228]], 40);
+  const step = lathe([[.30, .203], [.34, .203], [.34, .218], [.30, .218]], 40);
+  const pad = () => lathe([[0, .198], [.034, .198], [.034, .214], [0, .214]], 14);
+  const pads = merge([bake(pad(), T(0, 0, .39)), bake(pad(), T(0, 0, -.39))]);
+  const fTotal = merge([outer, step, pads]);
+  bake(fTotal, T(-.52, 0, .48));
+  return fTotal;
+}
+
+// Astronomical Moonphase Complication at 6 o'clock — gold frame, midnight sky, crescent moon
+function moonphaseGeo() {
+  const gold = merge([
+    lathe([[.225, .196], [.30, .196], [.30, .226], [.225, .226]], 44),
+    lathe([[.20, .201], [.225, .201], [.225, .216], [.20, .216]], 44)
+  ]);
+  const sky = lathe([[0, .202], [.202, .202], [.202, .205], [0, .205]], 40);
+  const moon = lathe([[0, .206], [.062, .206], [.062, .2095], [0, .2095]], 30);
+  shift(moon, -.042, 0, -.010);
+  const mask = lathe([[0, .210], [.060, .210], [.060, .212], [0, .212]], 30);
+  shift(mask, -.010, 0, .004);
+  const stars = merge([
+    (() => { const s = lathe([[0, .206], [.010, .206], [.010, .208], [0, .208]], 10); return shift(s, .055, 0, -.05); })(),
+    (() => { const s = lathe([[0, .206], [.009, .206], [.009, .208], [0, .208]], 10); return shift(s, -.045, 0, .058); })(),
+    (() => { const s = lathe([[0, .206], [.008, .206], [.008, .208], [0, .208]], 10); return shift(s, .022, 0, .075); })()
+  ]);
+  const g = merge([gold, moon, stars]);
+  bake(g, T(0, 0, 1.05));
+  bake(sky, T(0, 0, 1.05));
+  bake(mask, T(0, 0, 1.05));
+  return { gold: g, sky, mask };
+}
+
+// 3D Faceted Dauphine Hand with center ridge (roof-pitched cross section)
+function dauphineHand(L, w, hub, h, tipW = 0.008) {
+  const g = { p: [], n: [], i: [] };
+  const add = (x, y, z, nx, ny, nz) => { g.p.push(x, y, z); g.n.push(nx, ny, nz); return g.p.length / 3 - 1; };
+  const nLy = w * 0.75, nLx = -h * 0.8, lL = Math.hypot(nLx, nLy);
+  const nLeft = [nLx / lL, nLy / lL, 0], nRight = [-nLx / lL, nLy / lL, 0];
+  const r0 = [0, h, hub], r1 = [0, h * 0.7, -L * 0.97], rTip = [0, h * 0.4, -L];
+  const lHub = [-w * 0.65, h * 0.15, hub * 0.75], lMid = [-w, h * 0.15, 0], lTip = [-tipW, h * 0.1, -L];
+  const rHub = [w * 0.65, h * 0.15, hub * 0.75], rMid = [w, h * 0.15, 0], rTipR = [tipW, h * 0.1, -L];
+  const bHub = [0, -h * 0.25, hub * 0.8], bTip = [0, -h * 0.25, -L];
+
+  const p_r0_L = add(r0[0], r0[1], r0[2], nLeft[0], nLeft[1], nLeft[2]);
+  const p_r1_L = add(r1[0], r1[1], r1[2], nLeft[0], nLeft[1], nLeft[2]);
+  const p_rTip_L = add(rTip[0], rTip[1], rTip[2], nLeft[0], nLeft[1], nLeft[2]);
+  const p_lHub_L = add(lHub[0], lHub[1], lHub[2], nLeft[0], nLeft[1], nLeft[2]);
+  const p_lMid_L = add(lMid[0], lMid[1], lMid[2], nLeft[0], nLeft[1], nLeft[2]);
+  const p_lTip_L = add(lTip[0], lTip[1], lTip[2], nLeft[0], nLeft[1], nLeft[2]);
+  g.i.push(p_r0_L, p_lHub_L, p_lMid_L, p_r0_L, p_lMid_L, p_r1_L, p_r1_L, p_lMid_L, p_lTip_L, p_r1_L, p_lTip_L, p_rTip_L);
+
+  const p_r0_R = add(r0[0], r0[1], r0[2], nRight[0], nRight[1], nRight[2]);
+  const p_r1_R = add(r1[0], r1[1], r1[2], nRight[0], nRight[1], nRight[2]);
+  const p_rTip_R = add(rTip[0], rTip[1], rTip[2], nRight[0], nRight[1], nRight[2]);
+  const p_rHub_R = add(rHub[0], rHub[1], rHub[2], nRight[0], nRight[1], nRight[2]);
+  const p_rMid_R = add(rMid[0], rMid[1], rMid[2], nRight[0], nRight[1], nRight[2]);
+  const p_rTip_R2 = add(rTipR[0], rTipR[1], rTipR[2], nRight[0], nRight[1], nRight[2]);
+  g.i.push(p_r0_R, p_rMid_R, p_rHub_R, p_r0_R, p_r1_R, p_rMid_R, p_r1_R, p_rTip_R2, p_rMid_R, p_r1_R, p_rTip_R, p_rTip_R2);
+
+  const p_bHub = add(bHub[0], bHub[1], bHub[2], 0, -1, 0), p_bTip = add(bTip[0], bTip[1], bTip[2], 0, -1, 0);
+  const p_lMid_B = add(lMid[0], -h * 0.25, lMid[2], 0, -1, 0), p_rMid_B = add(rMid[0], -h * 0.25, rMid[2], 0, -1, 0);
+  g.i.push(p_bHub, p_lMid_B, p_rMid_B, p_lMid_B, p_bTip, p_rMid_B);
+  return g;
+}
+
+const gearPoly = (n, ro, ri, cutRatio = 0.5) => {
+  const q = [], w = TAU / n;
+  for (let i = 0; i < n; i++) {
+    const f0 = 0.05, f1 = cutRatio * 0.9, f2 = cutRatio, f3 = 0.95;
+    [[ro, f0], [ro, f1], [ri, f2], [ri, f3]].forEach(([r, f]) => {
+      q.push([r * Math.cos(i * w + f * w), r * Math.sin(i * w + f * w)]);
+    });
+  }
+  return q;
+};
+
